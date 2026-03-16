@@ -1,0 +1,674 @@
+{
+  "document_info": {
+    "document_type": "PRD",
+    "project_id": "connectme-dating-bot",
+    "version": "1.0.0",
+    "created_date": "2026-03-16",
+    "status": "draft",
+    "author": "Product Manager (Autonomous System)"
+  },
+  "project_name": "ConnectMe",
+  "project_type": "dating",
+  "tagline": "Твоя digital-фея для знакомств",
+  "goal": "Знакомства с icebreaker-вопросами для застенчивых пользователей",
+  "description": "ConnectMe — это dating-бот для умных, но скромных пользователей, которые испытывают трудности с началом разговора. Бот не только подбирает пары, но и помогает начать общение с помощью ледяных байтов (интересных вопросов и фактов о собеседнике).",
+  "target_audience": {
+    "primary": "Застенчивые пользователи 18-35 лет, испытывающие трудности с началом разговора",
+    "secondary": "Пользователи, ищущие серьёзные отношения через интеллектуальное общение",
+    "pain_points": [
+      "Страх подойти первым",
+      "Незнание, что написать, чтобы не быть банальным",
+      "Трудности с поддержанием разговора",
+      "Отсутствие идей для свиданий"
+    ]
+  },
+  "core_features": [
+    {
+      "id": "F001",
+      "name": "Регистрация",
+      "priority": "P0",
+      "description": "Первичная регистрация пользователя через Telegram ID при команде /start",
+      "user_story": "Как новый пользователь, я хочу быстро зарегистрироваться, чтобы начать пользоваться ботом"
+    },
+    {
+      "id": "F002",
+      "name": "Создание анкеты",
+      "priority": "P0",
+      "description": "CRUD операции для профиля пользователя: возраст, пол, интересы, геолокация, фото",
+      "user_story": "Как пользователь, я хочу создать подробную анкету с фото, чтобы другие могли узнать обо мне"
+    },
+    {
+      "id": "F003",
+      "name": "Поиск анкет",
+      "priority": "P0",
+      "description": "Просмотр анкет других пользователей с учётом предпочтений и рейтинга",
+      "user_story": "Как пользователь, я хочу видеть подходящие анкеты, чтобы найти интересного собеседника"
+    },
+    {
+      "id": "F004",
+      "name": "Лайки/мэтчи",
+      "priority": "P0",
+      "description": "Система свайпов (лайк/пропуск), при взаимном лайке создаётся мэтч",
+      "user_story": "Как пользователь, я хочу лайкать анкеты и получать мэтчи при взаимной симпатии"
+    },
+    {
+      "id": "F005",
+      "name": "Ледокол (icebreaker вопросы)",
+      "priority": "P1",
+      "description": "Кнопка, которая отправляет случайный вопрос от имени пользователя для начала разговора",
+      "user_story": "Как застенчивый пользователь, я хочу получить готовый вопрос для начала разговора, чтобы не ломать голову"
+    },
+    {
+      "id": "F006",
+      "name": "Идеи для свиданий",
+      "priority": "P2",
+      "description": "Подборка идей для свиданий на основе интересов пары",
+      "user_story": "Как пользователь с мэтчем, я хочу получить идеи для свидания, чтобы предложить интересное место"
+    },
+    {
+      "id": "F007",
+      "name": "Чат с мэтчами",
+      "priority": "P0",
+      "description": "Возможность обмена сообщениями с пользователями, с которыми произошёл мэтч",
+      "user_story": "Как пользователь с мэтчем, я хочу общаться в чате, чтобы узнать собеседника лучше"
+    }
+  ],
+  "telegram_specifics": {
+    "bot_commands": [
+      {
+        "command": "/start",
+        "description": "Начать работу с ботом, регистрация"
+      },
+      {
+        "command": "/profile",
+        "description": "Просмотр и редактирование своего профиля"
+      },
+      {
+        "command": "/search",
+        "description": "Начать поиск анкет для лайков"
+      },
+      {
+        "command": "/icebreaker",
+        "description": "Получить случайный вопрос для начала разговора"
+      },
+      {
+        "command": "/matches",
+        "description": "Просмотр списка мэтчей"
+      },
+      {
+        "command": "/settings",
+        "description": "Настройки предпочтений и уведомлений"
+      }
+    ],
+    "inline_buttons": [
+      "❤️ Лайк",
+      "❌ Пропустить",
+      "🧊 Ледокол",
+      "💬 Написать",
+      "📝 Редактировать профиль",
+      "📸 Добавить фото",
+      "⚙️ Настройки",
+      "🎁 Идеи для свиданий"
+    ],
+    "message_types": [
+      "text",
+      "photo",
+      "inline_keyboard"
+    ]
+  },
+  "technical_requirements": {
+    "stack": {
+      "bot": "aiogram 3.x",
+      "backend": "FastAPI",
+      "database": "PostgreSQL",
+      "cache": "Redis",
+      "queue": "RabbitMQ",
+      "tasks": "Celery",
+      "storage": "Minio (S3-compatible)"
+    },
+    "architecture": {
+      "type": "микросервисная",
+      "services": [
+        {
+          "name": "Telegram Bot Service",
+          "responsibility": "Обработка команд и сообщений от пользователей",
+          "technology": "aiogram 3.x"
+        },
+        {
+          "name": "API Gateway",
+          "responsibility": "REST API для всех сервисов",
+          "technology": "FastAPI"
+        },
+        {
+          "name": "Profile Service",
+          "responsibility": "CRUD операций с профилями пользователей",
+          "technology": "FastAPI + PostgreSQL"
+        },
+        {
+          "name": "Matching Service",
+          "responsibility": "Алгоритмы подбора и ранжирования анкет",
+          "technology": "FastAPI + Redis"
+        },
+        {
+          "name": "Chat Service",
+          "responsibility": "Обмен сообщениями между мэтчами",
+          "technology": "FastAPI + WebSocket"
+        },
+        {
+          "name": "Rating Service",
+          "responsibility": "Расчёт и обновление рейтингов пользователей",
+          "technology": "Celery + PostgreSQL"
+        },
+        {
+          "name": "Media Service",
+          "responsibility": "Загрузка и хранение фотографий",
+          "technology": "Minio SDK"
+        },
+        {
+          "name": "Icebreaker Service",
+          "responsibility": "Генерация и подбор вопросов для ледокола",
+          "technology": "FastAPI + PostgreSQL"
+        }
+      ]
+    },
+    "caching": {
+      "technology": "Redis",
+      "strategy": "Предварительная загрузка 10 анкет на сессию",
+      "description": "При начале сессии первая анкета проходит полный путь через все сервисы, одновременно подгружаются 10 анкет в Redis. На последней анкете круг повторяется."
+    },
+    "message_queue": {
+      "technology": "RabbitMQ",
+      "exchanges": [
+        {
+          "name": "swipe_events",
+          "type": "direct",
+          "description": "События лайков и пропусков"
+        },
+        {
+          "name": "match_events",
+          "type": "direct",
+          "description": "События создания мэтчей"
+        },
+        {
+          "name": "rating_updates",
+          "type": "fanout",
+          "description": "События для обновления рейтингов"
+        },
+        {
+          "name": "chat_messages",
+          "type": "direct",
+          "description": "Сообщения чата между пользователями"
+        }
+      ]
+    },
+    "task_queue": {
+      "technology": "Celery",
+      "scheduled_tasks": [
+        {
+          "name": "rating_recalculation",
+          "schedule": "daily",
+          "description": "Пересчёт комбинированных рейтингов пользователей"
+        },
+        {
+          "name": "cleanup_expired_sessions",
+          "schedule": "hourly",
+          "description": "Очистка устаревших сессионных данных из Redis"
+        },
+        {
+          "name": "analytics_aggregation",
+          "schedule": "daily",
+          "description": "Агрегация метрик для аналитики"
+        }
+      ]
+    },
+    "storage": {
+      "technology": "Minio",
+      "buckets": [
+        {
+          "name": "profile-photos",
+          "description": "Фотографии профилей пользователей",
+          "access": "private"
+        },
+        {
+          "name": "icebreaker-media",
+          "description": "Медиа-контент для вопросов ледокола",
+          "access": "public"
+        }
+      ]
+    },
+    "monitoring": {
+      "metrics": [
+        "total_users",
+        "active_users_daily",
+        "swipes_per_hour",
+        "matches_per_day",
+        "icebreaker_usage_rate",
+        "message_exchange_rate",
+        "cache_hit_rate",
+        "queue_message_lag",
+        "api_response_time_p95",
+        "error_rate"
+      ],
+      "logging": {
+        "level": "INFO",
+        "format": "JSON",
+        "destinations": ["file", "stdout"],
+        "retention_days": 30
+      }
+    }
+  },
+  "data_requirements": {
+    "user_entities": [
+      {
+        "name": "User",
+        "description": "Базовая сущность пользователя Telegram",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "telegram_id", "type": "BIGINT", "unique": true},
+          {"name": "username", "type": "STRING"},
+          {"name": "first_name", "type": "STRING"},
+          {"name": "last_name", "type": "STRING"},
+          {"name": "language_code", "type": "STRING"},
+          {"name": "is_bot", "type": "BOOLEAN"},
+          {"name": "created_at", "type": "TIMESTAMP"},
+          {"name": "updated_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "Profile",
+        "description": "Расширенный профиль пользователя для знакомств",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "user_id", "type": "UUID", "foreign_key": "User.id"},
+          {"name": "age", "type": "INTEGER"},
+          {"name": "gender", "type": "ENUM(male, female, other)"},
+          {"name": "bio", "type": "TEXT"},
+          {"name": "interests", "type": "JSONB"},
+          {"name": "city", "type": "STRING"},
+          {"name": "latitude", "type": "DECIMAL"},
+          {"name": "longitude", "type": "DECIMAL"},
+          {"name": "looking_for", "type": "ENUM(male, female, both)"},
+          {"name": "age_range_min", "type": "INTEGER"},
+          {"name": "age_range_max", "type": "INTEGER"},
+          {"name": "distance_max_km", "type": "INTEGER"},
+          {"name": "is_active", "type": "BOOLEAN"},
+          {"name": "is_verified", "type": "BOOLEAN"},
+          {"name": "created_at", "type": "TIMESTAMP"},
+          {"name": "updated_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "Photo",
+        "description": "Фотографии профиля",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "profile_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "s3_key", "type": "STRING"},
+          {"name": "s3_bucket", "type": "STRING"},
+          {"name": "is_primary", "type": "BOOLEAN"},
+          {"name": "order", "type": "INTEGER"},
+          {"name": "created_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "Swipe",
+        "description": "Действия пользователя (лайк/пропуск)",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "swiper_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "swiped_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "action", "type": "ENUM(like, pass)"},
+          {"name": "created_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "Match",
+        "description": "Взаимные лайки (мэтчи)",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "user1_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "user2_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "status", "type": "ENUM(active, archived, blocked)"},
+          {"name": "created_at", "type": "TIMESTAMP"},
+          {"name": "updated_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "Message",
+        "description": "Сообщения в чате между мэтчами",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "match_id", "type": "UUID", "foreign_key": "Match.id"},
+          {"name": "sender_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "content", "type": "TEXT"},
+          {"name": "message_type", "type": "ENUM(text, photo, icebreaker)"},
+          {"name": "is_read", "type": "BOOLEAN"},
+          {"name": "created_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "IcebreakerQuestion",
+        "description": "Вопросы для функции Ледокол",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "category", "type": "ENUM(general, hobbies, travel, food, entertainment, deep)"},
+          {"name": "question_text", "type": "TEXT"},
+          {"name": "difficulty", "type": "ENUM(light, medium, deep)"},
+          {"name": "usage_count", "type": "INTEGER"},
+          {"name": "success_rate", "type": "DECIMAL"},
+          {"name": "is_active", "type": "BOOLEAN"},
+          {"name": "created_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "IcebreakerUsage",
+        "description": "История использования ледоколов",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "question_id", "type": "UUID", "foreign_key": "IcebreakerQuestion.id"},
+          {"name": "sender_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "recipient_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "match_id", "type": "UUID", "foreign_key": "Match.id"},
+          {"name": "was_responded", "type": "BOOLEAN"},
+          {"name": "created_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "Rating",
+        "description": "Рейтинги пользователей (многоуровневая система)",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "profile_id", "type": "UUID", "foreign_key": "Profile.id"},
+          {"name": "primary_score", "type": "DECIMAL"},
+          {"name": "behavioral_score", "type": "DECIMAL"},
+          {"name": "combined_score", "type": "DECIMAL"},
+          {"name": "referral_bonus", "type": "DECIMAL"},
+          {"name": "last_calculated_at", "type": "TIMESTAMP"},
+          {"name": "created_at", "type": "TIMESTAMP"},
+          {"name": "updated_at", "type": "TIMESTAMP"}
+        ]
+      },
+      {
+        "name": "DateIdea",
+        "description": "Идеи для свиданий",
+        "fields": [
+          {"name": "id", "type": "UUID", "primary_key": true},
+          {"name": "category", "type": "ENUM(cafe, activity, outdoor, cultural, entertainment)"},
+          {"name": "title", "type": "STRING"},
+          {"name": "description", "type": "TEXT"},
+          {"name": "avg_cost", "type": "ENUM(free, low, medium, high)"},
+          {"name": "suitable_interests", "type": "JSONB"},
+          {"name": "is_active", "type": "BOOLEAN"},
+          {"name": "created_at", "type": "TIMESTAMP"}
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "name": "like",
+        "description": "Пользователь лайкает анкету",
+        "triggers": ["swipe_event", "rating_update"]
+      },
+      {
+        "name": "pass",
+        "description": "Пользователь пропускает анкету",
+        "triggers": ["swipe_event"]
+      },
+      {
+        "name": "match",
+        "description": "Создание мэтча при взаимном лайке",
+        "triggers": ["match_event", "notification", "chat_creation"]
+      },
+      {
+        "name": "message",
+        "description": "Отправка сообщения в чате",
+        "triggers": ["chat_message_event", "notification"]
+      },
+      {
+        "name": "icebreaker_request",
+        "description": "Запрос вопроса ледокола",
+        "triggers": ["icebreaker_selection", "message_send"]
+      },
+      {
+        "name": "profile_update",
+        "description": "Обновление профиля пользователя",
+        "triggers": ["primary_rating_recalculation"]
+      },
+      {
+        "name": "photo_upload",
+        "description": "Загрузка фотографии профиля",
+        "triggers": ["s3_upload", "primary_rating_recalculation"]
+      }
+    ],
+    "indexes": [
+      "Profile(user_id)",
+      "Profile(gender, looking_for, is_active)",
+      "Profile(city, latitude, longitude)",
+      "Swipe(swiper_id, swiped_id)",
+      "Swipe(swiped_id, action)",
+      "Match(user1_id, user2_id)",
+      "Match(status)",
+      "Message(match_id, created_at)",
+      "Rating(profile_id, combined_score)",
+      "IcebreakerQuestion(category, is_active)"
+    ]
+  },
+  "rating_system": {
+    "description": "Многоуровневая система ранжирования пользователей",
+    "levels": [
+      {
+        "level": 1,
+        "name": "Первичный рейтинг",
+        "description": "Формируется на основе данных из анкеты",
+        "factors": [
+          {
+            "name": "completeness_score",
+            "weight": 0.3,
+            "description": "Полнота заполнения анкеты (возраст, пол, интересы, био)"
+          },
+          {
+            "name": "photo_score",
+            "weight": 0.3,
+            "description": "Количество и качество загруженных фотографий"
+          },
+          {
+            "name": "preference_match",
+            "weight": 0.2,
+            "description": "Соответствие первичным предпочтениям (возрастной диапазон, пол, город)"
+          },
+          {
+            "name": "verification_bonus",
+            "weight": 0.2,
+            "description": "Бонус за верифицированный профиль"
+          }
+        ],
+        "recalculation": "on_profile_update"
+      },
+      {
+        "level": 2,
+        "name": "Поведенческий рейтинг",
+        "description": "Динамически корректируется на основе взаимодействия",
+        "factors": [
+          {
+            "name": "like_count",
+            "weight": 0.25,
+            "description": "Количество полученных лайков"
+          },
+          {
+            "name": "like_pass_ratio",
+            "weight": 0.25,
+            "description": "Соотношение лайков и пропусков"
+          },
+          {
+            "name": "match_rate",
+            "weight": 0.2,
+            "description": "Частота взаимных лайков (мэтчей)"
+          },
+          {
+            "name": "conversation_initiation",
+            "weight": 0.15,
+            "description": "Частота инициирования диалогов после мэтча"
+          },
+          {
+            "name": "activity_pattern",
+            "weight": 0.15,
+            "description": "Временные параметры активности (время суток, дни недели)"
+          }
+        ],
+        "recalculation": "daily_via_celery"
+      },
+      {
+        "level": 3,
+        "name": "Комбинированный рейтинг",
+        "description": "Интеграция первичного и поведенческого рейтингов",
+        "formula": "combined = (primary * 0.4) + (behavioral * 0.4) + (referral_bonus * 0.2)",
+        "factors": [
+          {
+            "name": "primary_weight",
+            "weight": 0.4,
+            "description": "Вес первичного рейтинга"
+          },
+          {
+            "name": "behavioral_weight",
+            "weight": 0.4,
+            "description": "Вес поведенческого рейтинга"
+          },
+          {
+            "name": "referral_bonus",
+            "weight": 0.2,
+            "description": "Бонус за приглашение друзей (реферальная система)"
+          }
+        ],
+        "recalculation": "daily_via_celery"
+      }
+    ],
+    "redis_caching": {
+      "description": "Кэширование предварительно отранжированных списков",
+      "cache_size": 10,
+      "key_pattern": "ranked_profiles:{user_id}:{session_id}",
+      "ttl_seconds": 3600,
+      "refresh_strategy": "on_session_end"
+    }
+  },
+  "success_criteria": [
+    {
+      "id": "SC001",
+      "criterion": "Пользователь может создать анкету",
+      "measurement": "Процент пользователей, завершивших создание профиля",
+      "target": "80%"
+    },
+    {
+      "id": "SC002",
+      "criterion": "Пользователь может лайкать анкеты",
+      "measurement": "Среднее количество свайпов на пользователя в день",
+      "target": "20+ свайпов/день"
+    },
+    {
+      "id": "SC003",
+      "criterion": "При мэтче открывается чат",
+      "measurement": "Процент мэтчей, приводящих к обмену сообщениями",
+      "target": "60%"
+    },
+    {
+      "id": "SC004",
+      "criterion": "Кнопка Ледокол отправляет случайный вопрос",
+      "measurement": "Процент пользователей, использующих ледокол хотя бы раз",
+      "target": "50%"
+    },
+    {
+      "id": "SC005",
+      "criterion": "Система ранжирования работает корректно",
+      "measurement": "Точность подбора анкет (релевантность топ-10)",
+      "target": "85%"
+    },
+    {
+      "id": "SC006",
+      "criterion": "Производительность системы",
+      "measurement": "Время загрузки анкеты (P95)",
+      "target": "< 500ms"
+    },
+    {
+      "id": "SC007",
+      "criterion": "Кэш-эффективность",
+      "measurement": "Redis cache hit rate",
+      "target": "> 90%"
+    }
+  ],
+  "development_phases": [
+    {
+      "phase": 1,
+      "name": "Планирование и проектирование",
+      "status": "in_progress",
+      "deliverables": [
+        "PRD (этот документ)",
+        "Архитектурная схема системы",
+        "Схема базы данных",
+        "Протоколы взаимодействия сервисов"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Разработка базовой функциональности",
+      "status": "pending",
+      "deliverables": [
+        "Telegram Bot Service на aiogram 3.x",
+        "Регистрация через /start",
+        "Базовый интерфейс пользователя",
+        "Интеграция с Telegram Bot API"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Система анкет и ранжирования",
+      "status": "pending",
+      "deliverables": [
+        "CRUD для анкет",
+        "Алгоритм ранжирования (3 уровня)",
+        "Redis кэширование (10 анкет на сессию)",
+        "Интеграция с Message Queue"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Дополнительные функции",
+      "status": "pending",
+      "deliverables": [
+        "Celery задачи для пересчёта рейтингов",
+        "Функция Ледокол",
+        "Идеи для свиданий",
+        "Оптимизация БД и производительности",
+        "Тестирование",
+        "Деплой"
+      ]
+    }
+  ],
+  "risks_and_mitigations": [
+    {
+      "risk": "Низкая активность пользователей после регистрации",
+      "mitigation": "Геймификация, push-уведомления, бонусы за активность",
+      "priority": "high"
+    },
+    {
+      "risk": "Недостаточное количество анкет для подбора",
+      "mitigation": "Реферальная программа, маркетинг, кросс-промо",
+      "priority": "high"
+    },
+    {
+      "risk": "Сложность настройки инфраструктуры (RabbitMQ, Redis, Celery, Minio)",
+      "mitigation": "Docker Compose для локальной разработки, подробная документация",
+      "priority": "medium"
+    },
+    {
+      "risk": "Проблемы с производительностью при росте нагрузки",
+      "mitigation": "Кэширование, горизонтальное масштабирование, оптимизация запросов",
+      "priority": "medium"
+    }
+  ],
+  "open_questions": [
+    "Требуется ли модерация фотографий перед публикацией?",
+    "Нужна ли система жалоб на пользователей?",
+    "Требуется ли интеграция с платёжными системами для премиум-функций?",
+    "Какой минимальный возраст пользователей (18+ или 21+)?",
+    "Требуется ли поддержка нескольких языков кроме русского?"
+  ]
+}

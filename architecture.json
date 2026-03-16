@@ -1,0 +1,378 @@
+{
+  "document_info": {
+    "project_id": "connectme-dating-bot",
+    "document_type": "architecture_specification",
+    "version": "1.0.0",
+    "created_date": "2026-03-16",
+    "author": "System Architect (Autonomous System)"
+  },
+  "services": [
+    {
+      "name": "Telegram Bot Service",
+      "description": "Основной интерфейс взаимодействия с пользователями через Telegram. Обрабатывает команды, сообщения, медиа-контент и управляет сессиями.",
+      "technologies": ["Python 3.11+", "aiogram 3.x", "aiohttp"],
+      "functions": [
+        "Обработка команд: /start, /profile, /search, /icebreaker, /matches, /settings",
+        "Приём и отправка сообщений",
+        "Рендеринг inline-клавиатур",
+        "Обработка фотографий",
+        "Управление сессиями пользователей",
+        "Отправка уведомлений о мэтчах"
+      ],
+      "interactions": [
+        {"target": "Backend API", "type": "REST", "direction": "outbound", "description": "Запросы данных и действия"},
+        {"target": "Telegram Bot API", "type": "HTTPS", "direction": "bidirectional", "description": "Получение обновлений, отправка сообщений"}
+      ],
+      "port": null,
+      "scaling": "horizontal via webhook"
+    },
+    {
+      "name": "Backend API",
+      "description": "API Gateway — единая точка входа для всех клиентских запросов. Оркестрирует взаимодействие с микросервисами.",
+      "technologies": ["Python 3.11+", "FastAPI", "Pydantic", "Uvicorn", "JWT"],
+      "functions": [
+        "Маршрутизация запросов",
+        "Аутентификация по Telegram ID",
+        "Агрегация данных из сервисов",
+        "Валидация входных данных",
+        "Rate limiting",
+        "Логирование запросов"
+      ],
+      "interactions": [
+        {"target": "Profile Service", "type": "REST", "direction": "outbound", "description": "CRUD профилей"},
+        {"target": "Matching Service", "type": "REST", "direction": "outbound", "description": "Подбор анкет, свайпы"},
+        {"target": "Chat Service", "type": "REST", "direction": "outbound", "description": "Сообщения, мэтчи"},
+        {"target": "Icebreaker Service", "type": "REST", "direction": "outbound", "description": "Вопросы ледокола"},
+        {"target": "Media Service", "type": "REST", "direction": "outbound", "description": "Загрузка фото"},
+        {"target": "Telegram Bot Service", "type": "REST", "direction": "inbound", "description": "Входящие запросы"}
+      ],
+      "port": 8000,
+      "scaling": "horizontal via load balancer"
+    },
+    {
+      "name": "Profile Service",
+      "description": "Управление профилями пользователей: создание, чтение, обновление, деактивация анкет.",
+      "technologies": ["Python 3.11+", "FastAPI", "SQLAlchemy", "asyncpg", "PostgreSQL JSONB"],
+      "functions": [
+        "Создание профиля при регистрации",
+        "CRUD операции с профилями",
+        "Управление интересами (JSONB)",
+        "Геолокация (широта/долгота)",
+        "Проверка предпочтений"
+      ],
+      "interactions": [
+        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "Хранение профилей"},
+        {"target": "Rating Service", "type": "event", "direction": "outbound", "description": "Уведомление об обновлении профиля"},
+        {"target": "Media Service", "type": "REST", "direction": "outbound", "description": "Связь с фотографиями"}
+      ],
+      "port": 8001,
+      "scaling": "horizontal"
+    },
+    {
+      "name": "Matching Service",
+      "description": "Алгоритмы подбора и ранжирования анкет. Обработка свайпов и создание мэтчей. Кэширование 10 анкет в Redis.",
+      "technologies": ["Python 3.11+", "FastAPI", "Redis", "PostgreSQL", "PostGIS", "RabbitMQ"],
+      "functions": [
+        "Подбор анкет по фильтрам (пол, возраст, гео)",
+        "Ранжирование по комбинированному рейтингу",
+        "Кэширование 10 анкет на сессию",
+        "Обработка лайков и пропусков",
+        "Создание мэтчей при взаимных лайках",
+        "Публикация событий в RabbitMQ"
+      ],
+      "interactions": [
+        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "Свайпы, мэтчи, профили"},
+        {"target": "Redis", "type": "TCP", "direction": "bidirectional", "description": "Кэш анкет: ranked_profiles:{user_id}:{session_id}"},
+        {"target": "RabbitMQ", "type": "AMQP", "direction": "outbound", "description": "Публикация swipe_events, match_events"},
+        {"target": "Rating Service", "type": "REST", "direction": "outbound", "description": "Запрос рейтингов"}
+      ],
+      "port": 8002,
+      "scaling": "horizontal"
+    },
+    {
+      "name": "Chat Service",
+      "description": "Обмен сообщениями между пользователями с активным мэтчем. Поддержка текстовых, icebreaker и медиа-сообщений.",
+      "technologies": ["Python 3.11+", "FastAPI", "WebSockets", "RabbitMQ"],
+      "functions": [
+        "Отправка текстовых сообщений",
+        "Отправка icebreaker-вопросов",
+        "Отправка фотографий",
+        "Статус прочтения",
+        "WebSocket для real-time",
+        "История переписки"
+      ],
+      "interactions": [
+        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "Сохранение сообщений"},
+        {"target": "RabbitMQ", "type": "AMQP", "direction": "bidirectional", "description": "chat_messages exchange"},
+        {"target": "Matching Service", "type": "REST", "direction": "outbound", "description": "Проверка мэтча"}
+      ],
+      "port": 8003,
+      "scaling": "horizontal"
+    },
+    {
+      "name": "Icebreaker Service",
+      "description": "Генерация и подбор вопросов для функции «Ледокол». Умный выбор на основе интересов, success rate и частоты использования.",
+      "technologies": ["Python 3.11+", "FastAPI", "PostgreSQL", "Weighted Random Selection"],
+      "functions": [
+        "Хранение базы вопросов по категориям",
+        "Категории: general, hobbies, travel, food, entertainment, deep",
+        "Уровни: light, medium, deep",
+        "Подбор с учётом интересов пользователя",
+        "Отслеживание статистики использования",
+        "A/B тестирование вопросов"
+      ],
+      "interactions": [
+        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "icebreaker_questions, icebreaker_usage"},
+        {"target": "Profile Service", "type": "REST", "direction": "outbound", "description": "Получение интересов"},
+        {"target": "Chat Service", "type": "REST", "direction": "outbound", "description": "Вставка вопроса в сообщение"}
+      ],
+      "port": 8004,
+      "scaling": "horizontal"
+    },
+    {
+      "name": "Rating Service",
+      "description": "Расчёт многоуровневых рейтингов: первичный (данные анкеты), поведенческий (активность), комбинированный (формула).",
+      "technologies": ["Python 3.11+", "Celery 5.x", "PostgreSQL", "Redis"],
+      "functions": [
+        "Первичный рейтинг: completeness (30%), photo (30%), preference_match (20%), verification (20%)",
+        "Поведенческий рейтинг: like_count (25%), like_pass_ratio (25%), match_rate (20%), conversation_initiation (15%), activity_pattern (15%)",
+        "Комбинированный рейтинг: combined = (primary * 0.4) + (behavioral * 0.4) + (referral_bonus * 0.2)",
+        "Ежедневный пересчёт через Celery"
+      ],
+      "interactions": [
+        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "Таблица ratings"},
+        {"target": "RabbitMQ", "type": "AMQP", "direction": "inbound", "description": "Подписка на rating_updates"},
+        {"target": "Redis", "type": "TCP", "direction": "outbound", "description": "Брокер Celery"}
+      ],
+      "port": null,
+      "scaling": "Celery workers"
+    },
+    {
+      "name": "Media Service",
+      "description": "Загрузка, валидация и хранение фотографий профилей. Генерация превью и presigned URLs.",
+      "technologies": ["Python 3.11+", "FastAPI", "Minio SDK", "Pillow"],
+      "functions": [
+        "Загрузка фотографий",
+        "Генерация thumbnails",
+        "Валидация формата и размера",
+        "Управление бакетами Minio",
+        "Presigned URLs",
+        "Удаление медиа"
+      ],
+      "interactions": [
+        {"target": "Minio", "type": "S3", "direction": "bidirectional", "description": "Объектное хранилище"},
+        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "Метаданные фото"},
+        {"target": "Profile Service", "type": "REST", "direction": "inbound", "description": "Привязка к профилю"}
+      ],
+      "port": 8005,
+      "scaling": "horizontal"
+    }
+  ],
+  "infrastructure": [
+    {
+      "name": "PostgreSQL",
+      "type": "database",
+      "technologies": ["PostgreSQL 15+", "PostGIS", "pgBouncer"],
+      "port": 5432,
+      "tables": ["users", "profiles", "photos", "swipes", "matches", "messages", "icebreaker_questions", "icebreaker_usage", "ratings", "date_ideas"],
+      "description": "Основное хранилище структурированных данных с поддержкой гео-запросов"
+    },
+    {
+      "name": "Redis",
+      "type": "cache",
+      "technologies": ["Redis 7+"],
+      "port": 6379,
+      "keys": [
+        "ranked_profiles:{user_id}:{session_id}",
+        "session:{telegram_id}",
+        "ratelimit:{telegram_id}:{action}",
+        "celery:*"
+      ],
+      "ttl_seconds": 3600,
+      "description": "Кэширование 10 анкет на сессию, брокер Celery, rate limiting"
+    },
+    {
+      "name": "RabbitMQ",
+      "type": "queue",
+      "technologies": ["RabbitMQ 3.12+", "Management Plugin"],
+      "port": 5672,
+      "management_port": 15672,
+      "exchanges": [
+        {"name": "swipe_events", "type": "direct", "description": "События лайков и пропусков"},
+        {"name": "match_events", "type": "direct", "description": "События создания мэтчей"},
+        {"name": "rating_updates", "type": "fanout", "description": "Обновление рейтингов"},
+        {"name": "chat_messages", "type": "direct", "description": "Сообщения чата"}
+      ],
+      "description": "Асинхронная обработка событий между сервисами"
+    },
+    {
+      "name": "Celery Worker",
+      "type": "tasks",
+      "technologies": ["Celery 5.x", "Redis"],
+      "port": null,
+      "scheduled_tasks": [
+        {"name": "rating_recalculation", "schedule": "daily", "description": "Пересчёт комбинированных рейтингов"},
+        {"name": "cleanup_expired_sessions", "schedule": "hourly", "description": "Очистка сессий в Redis"},
+        {"name": "analytics_aggregation", "schedule": "daily", "description": "Агрегация метрик"}
+      ],
+      "description": "Фоновые и запланированные задачи"
+    },
+    {
+      "name": "Minio",
+      "type": "storage",
+      "technologies": ["Minio S3-compatible"],
+      "port": 9000,
+      "console_port": 9001,
+      "buckets": [
+        {"name": "profile-photos", "access": "private", "description": "Фотографии профилей"},
+        {"name": "icebreaker-media", "access": "public", "description": "Медиа для ледокола"}
+      ],
+      "description": "S3-совместимое объектное хранилище"
+    }
+  ],
+  "architecture_diagram": "flowchart TB\n    subgraph Client[\"📱 Клиентский слой\"]\n        TG[Telegram Client]\n    end\n\n    subgraph Bot[\"🤖 Telegram Bot Service\"]\n        BotSvc[aiogram 3.x Bot]\n    end\n\n    subgraph API[\"🌐 API Gateway Layer\"]\n        APIGW[FastAPI API Gateway]\n    end\n\n    subgraph Services[\"🔧 Микросервисы\"]\n        ProfileSvc[Profile Service]\n        MatchingSvc[Matching Service]\n        ChatSvc[Chat Service]\n        IcebreakerSvc[Icebreaker Service]\n        RatingSvc[Rating Service]\n        MediaSvc[Media Service]\n    end\n\n    subgraph Queue[\"📨 Message Queue\"]\n        RabbitMQ[RabbitMQ]\n        SwipeEx[swipe_events]\n        MatchEx[match_events]\n        RatingEx[rating_updates]\n        ChatEx[chat_messages]\n    end\n\n    subgraph Tasks[\"⚙️ Task Queue\"]\n        Celery[Celery Worker]\n        Redis[(Redis)]\n    end\n\n    subgraph Storage[\"💾 Хранилища данных\"]\n        PostgreSQL[(PostgreSQL)]\n        Minio[(Minio S3)]\n    end\n\n    subgraph Monitoring[\"📊 Monitoring\"]\n        Prometheus[Prometheus]\n        Grafana[Grafana]\n    end\n\n    TG -->|commands, messages| BotSvc\n    BotSvc -->|REST API| APIGW\n    APIGW --> ProfileSvc\n    APIGW --> MatchingSvc\n    APIGW --> ChatSvc\n    APIGW --> IcebreakerSvc\n    APIGW --> MediaSvc\n    ProfileSvc --> PostgreSQL\n    MatchingSvc --> PostgreSQL\n    ChatSvc --> PostgreSQL\n    IcebreakerSvc --> PostgreSQL\n    RatingSvc --> PostgreSQL\n    MediaSvc --> PostgreSQL\n    MatchingSvc -.->|кэш 10 анкет| Redis\n    MatchingSvc -->|публикация событий| RabbitMQ\n    ChatSvc -->|публикация сообщений| RabbitMQ\n    RabbitMQ --> SwipeEx\n    RabbitMQ --> MatchEx\n    RabbitMQ --> RatingEx\n    RabbitMQ --> ChatEx\n    SwipeEx --> Celery\n    MatchEx --> Celery\n    RatingEx --> Celery\n    ChatEx --> Celery\n    Celery -->|брокер/результаты| Redis\n    Celery -->|запись рейтингов| PostgreSQL\n    MediaSvc -->|загрузка фото| Minio\n    ProfileSvc -.->|метрики| Prometheus\n    MatchingSvc -.->|метрики| Prometheus\n    ChatSvc -.->|метрики| Prometheus\n    IcebreakerSvc -.->|метрики| Prometheus\n    RabbitMQ -.->|метрики| Prometheus\n    Redis -.->|метрики| Prometheus\n    PostgreSQL -.->|метрики| Prometheus\n    Prometheus --> Grafana",
+  "tech_stack": {
+    "bot": {
+      "framework": "aiogram 3.x",
+      "language": "Python 3.11+",
+      "description": "Асинхронный фреймворк для Telegram Bot API"
+    },
+    "backend": {
+      "framework": "FastAPI",
+      "language": "Python 3.11+",
+      "server": "Uvicorn",
+      "validation": "Pydantic",
+      "auth": "JWT / Session-based",
+      "description": "Асинхронный веб-фреймворк для микросервисов"
+    },
+    "database": {
+      "system": "PostgreSQL 15+",
+      "extensions": ["PostGIS", "JSONB"],
+      "pooling": "pgBouncer",
+      "description": "Реляционная БД с гео-возможностями"
+    },
+    "cache": {
+      "system": "Redis 7+",
+      "strategy": "Предварительная загрузка 10 анкет на сессию",
+      "key_pattern": "ranked_profiles:{user_id}:{session_id}",
+      "ttl_seconds": 3600,
+      "refresh_strategy": "on_session_end",
+      "description": "Кэширование и брокер Celery"
+    },
+    "queue": {
+      "system": "RabbitMQ 3.12+",
+      "exchanges": ["swipe_events", "match_events", "rating_updates", "chat_messages"],
+      "management": true,
+      "description": "Асинхронная обработка событий"
+    },
+    "tasks": {
+      "framework": "Celery 5.x",
+      "broker": "Redis",
+      "scheduled_tasks": ["rating_recalculation", "cleanup_expired_sessions", "analytics_aggregation"],
+      "description": "Фоновые задачи"
+    },
+    "storage": {
+      "system": "Minio",
+      "type": "S3-compatible",
+      "buckets": ["profile-photos (private)", "icebreaker-media (public)"],
+      "description": "Объектное хранилище для медиа"
+    }
+  },
+  "api_spec": [
+    {"path": "/api/v1/auth/telegram", "method": "POST", "description": "Аутентификация по Telegram ID", "auth": false},
+    {"path": "/api/v1/profile", "method": "GET", "description": "Получение своего профиля", "auth": true},
+    {"path": "/api/v1/profile", "method": "POST", "description": "Создание профиля", "auth": true},
+    {"path": "/api/v1/profile", "method": "PUT", "description": "Обновление профиля", "auth": true},
+    {"path": "/api/v1/profile/photo", "method": "POST", "description": "Загрузка фотографии профиля", "auth": true},
+    {"path": "/api/v1/matching/next", "method": "GET", "description": "Получение следующей анкеты (из кэша Redis)", "auth": true},
+    {"path": "/api/v1/matching/swipe", "method": "POST", "description": "Лайк или пропуск анкеты", "auth": true, "body": {"profile_id": "UUID", "action": "like|pass"}},
+    {"path": "/api/v1/matches", "method": "GET", "description": "Список активных мэтчей", "auth": true},
+    {"path": "/api/v1/messages/{match_id}", "method": "GET", "description": "История сообщений с мэтчем", "auth": true},
+    {"path": "/api/v1/messages/{match_id}", "method": "POST", "description": "Отправка сообщения мэтчу", "auth": true, "body": {"content": "string", "type": "text|photo|icebreaker"}},
+    {"path": "/api/v1/icebreaker/get_question", "method": "POST", "description": "Получение случайного вопроса ледокола", "auth": true, "body": {"match_id": "UUID"}},
+    {"path": "/api/v1/icebreaker/categories", "method": "GET", "description": "Список категорий вопросов", "auth": true},
+    {"path": "/api/v1/rating/my", "method": "GET", "description": "Получение своего рейтинга", "auth": true},
+    {"path": "/api/v1/media/upload-url", "method": "POST", "description": "Получение presigned URL для загрузки фото", "auth": true},
+    {"path": "/api/v1/media/{photo_id}", "method": "GET", "description": "Получение presigned URL для скачивания фото", "auth": true},
+    {"path": "/api/v1/settings", "method": "GET", "description": "Получение настроек пользователя", "auth": true},
+    {"path": "/api/v1/settings", "method": "PUT", "description": "Обновление настроек", "auth": true},
+    {"path": "/api/v1/health", "method": "GET", "description": "Health check сервиса", "auth": false}
+  ],
+  "data_flow": [
+    {
+      "id": "DF001",
+      "name": "Регистрация пользователя",
+      "flow": "Telegram → Bot Service → API Gateway → Profile Service → PostgreSQL (users, profiles) → Rating Service → PostgreSQL (ratings)"
+    },
+    {
+      "id": "DF002",
+      "name": "Загрузка фотографии",
+      "flow": "Telegram → Bot Service → API Gateway → Media Service → Minio (upload) → PostgreSQL (photo metadata) → Rating Service (update photo_score)"
+    },
+    {
+      "id": "DF003",
+      "name": "Подбор анкет с кэшированием",
+      "flow": "Telegram → Bot Service → API Gateway → Matching Service → Redis (cache check) → [miss] PostgreSQL (query) → Redis (cache 10 profiles) → Bot Service → Telegram"
+    },
+    {
+      "id": "DF004",
+      "name": "Лайк анкеты",
+      "flow": "Telegram → Bot Service → API Gateway → Matching Service → PostgreSQL (swipe record) → RabbitMQ (swipe_events) → Celery → Rating Service → PostgreSQL (rating update)"
+    },
+    {
+      "id": "DF005",
+      "name": "Создание мэтча",
+      "flow": "Matching Service → PostgreSQL (check mutual like) → PostgreSQL (create match) → RabbitMQ (match_events) → Celery → Chat Service (create chat) → Bot Service → Telegram (notify both users)"
+    },
+    {
+      "id": "DF006",
+      "name": "Отправка сообщения",
+      "flow": "Telegram → Bot Service → API Gateway → Chat Service → PostgreSQL (save message) → RabbitMQ (chat_messages) → Bot Service → Telegram (deliver to recipient)"
+    },
+    {
+      "id": "DF007",
+      "name": "Ледокол (icebreaker вопрос)",
+      "flow": "Telegram → Bot Service → API Gateway → Icebreaker Service → PostgreSQL (select question by interests, success_rate) → PostgreSQL (record usage) → Chat Service → PostgreSQL (message with type=icebreaker) → Bot Service → Telegram"
+    },
+    {
+      "id": "DF008",
+      "name": "Ежедневный пересчёт рейтингов",
+      "flow": "Celery Beat → Celery Worker → PostgreSQL (read swipes, matches) → Rating Service (calculate behavioral_score) → PostgreSQL (update combined_score)"
+    },
+    {
+      "id": "DF009",
+      "name": "Очистка сессий",
+      "flow": "Celery Beat (hourly) → Celery Worker → Redis (delete expired session keys)"
+    },
+    {
+      "id": "DF010",
+      "name": "Агрегация аналитики",
+      "flow": "Celery Beat (daily) → Celery Worker → PostgreSQL (aggregate metrics) → Prometheus (push metrics)"
+    }
+  ],
+  "metrics": {
+    "business": [
+      {"name": "total_users", "description": "Общее количество пользователей", "type": "counter"},
+      {"name": "active_users_daily", "description": "Ежедневная активная аудитория", "type": "gauge"},
+      {"name": "swipes_per_hour", "description": "Количество свайпов в час", "type": "gauge"},
+      {"name": "matches_per_day", "description": "Количество мэтчей в день", "type": "counter"},
+      {"name": "icebreaker_usage_rate", "description": "Процент использования ледокола", "type": "gauge"},
+      {"name": "message_exchange_rate", "description": "Количество сообщений в день", "type": "counter"}
+    ],
+    "technical": [
+      {"name": "cache_hit_rate", "description": "Эффективность кэша Redis", "target": ">90%", "type": "gauge"},
+      {"name": "queue_message_lag", "description": "Задержка обработки сообщений в очереди", "type": "gauge"},
+      {"name": "api_response_time_p95", "description": "95-й перцентиль времени ответа API", "target": "<500ms", "type": "histogram"},
+      {"name": "error_rate", "description": "Процент ошибок", "type": "gauge"}
+    ]
+  },
+  "success_criteria": {
+    "SC001": {"criterion": "Пользователь может создать анкету", "target": "80% completion rate"},
+    "SC002": {"criterion": "Пользователь может лайкать анкеты", "target": "20+ swipes/day"},
+    "SC003": {"criterion": "При мэтче открывается чат", "target": "60% match-to-message conversion"},
+    "SC004": {"criterion": "Кнопка Ледокол отправляет случайный вопрос", "target": "50% usage rate"},
+    "SC005": {"criterion": "Система ранжирования работает корректно", "target": "85% relevance accuracy"},
+    "SC006": {"criterion": "Производительность системы", "target": "<500ms P95 response time"},
+    "SC007": {"criterion": "Кэш-эффективность", "target": ">90% cache hit rate"}
+  }
+}
