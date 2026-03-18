@@ -10,8 +10,8 @@
   "project_name": "ConnectMe",
   "project_type": "dating",
   "tagline": "Твоя digital-фея для знакомств",
-  "goal": "Знакомства с icebreaker-вопросами для застенчивых пользователей",
-  "description": "ConnectMe — это dating-бот для умных, но скромных пользователей, которые испытывают трудности с началом разговора. Бот не только подбирает пары, но и помогает начать общение с помощью ледяных байтов (интересных вопросов и фактов о собеседнике).",
+  "goal": "Умные знакомства для осознанных пользователей",
+  "description": "ConnectMe — это dating-бот для умных пользователей, которые ищут серьёзные отношения. Бот не только подбирает пары по интересам и рейтингу, но и предоставляет удобный интерфейс для общения.",
   "target_audience": {
     "primary": "Застенчивые пользователи 18-35 лет, испытывающие трудности с началом разговора",
     "secondary": "Пользователи, ищущие серьёзные отношения через интеллектуальное общение",
@@ -53,20 +53,13 @@
     },
     {
       "id": "F005",
-      "name": "Ледокол (icebreaker вопросы)",
-      "priority": "P1",
-      "description": "Кнопка, которая отправляет случайный вопрос от имени пользователя для начала разговора",
-      "user_story": "Как застенчивый пользователь, я хочу получить готовый вопрос для начала разговора, чтобы не ломать голову"
-    },
-    {
-      "id": "F006",
       "name": "Идеи для свиданий",
       "priority": "P2",
       "description": "Подборка идей для свиданий на основе интересов пары",
       "user_story": "Как пользователь с мэтчем, я хочу получить идеи для свидания, чтобы предложить интересное место"
     },
     {
-      "id": "F007",
+      "id": "F006",
       "name": "Чат с мэтчами",
       "priority": "P0",
       "description": "Возможность обмена сообщениями с пользователями, с которыми произошёл мэтч",
@@ -88,10 +81,6 @@
         "description": "Начать поиск анкет для лайков"
       },
       {
-        "command": "/icebreaker",
-        "description": "Получить случайный вопрос для начала разговора"
-      },
-      {
         "command": "/matches",
         "description": "Просмотр списка мэтчей"
       },
@@ -103,7 +92,6 @@
     "inline_buttons": [
       "❤️ Лайк",
       "❌ Пропустить",
-      "🧊 Ледокол",
       "💬 Написать",
       "📝 Редактировать профиль",
       "📸 Добавить фото",
@@ -163,11 +151,6 @@
           "name": "Media Service",
           "responsibility": "Загрузка и хранение фотографий",
           "technology": "Minio SDK"
-        },
-        {
-          "name": "Icebreaker Service",
-          "responsibility": "Генерация и подбор вопросов для ледокола",
-          "technology": "FastAPI + PostgreSQL"
         }
       ]
     },
@@ -228,11 +211,6 @@
           "name": "profile-photos",
           "description": "Фотографии профилей пользователей",
           "access": "private"
-        },
-        {
-          "name": "icebreaker-media",
-          "description": "Медиа-контент для вопросов ледокола",
-          "access": "public"
         }
       ]
     },
@@ -242,7 +220,6 @@
         "active_users_daily",
         "swipes_per_hour",
         "matches_per_day",
-        "icebreaker_usage_rate",
         "message_exchange_rate",
         "cache_hit_rate",
         "queue_message_lag",
@@ -341,35 +318,8 @@
           {"name": "match_id", "type": "UUID", "foreign_key": "Match.id"},
           {"name": "sender_id", "type": "UUID", "foreign_key": "Profile.id"},
           {"name": "content", "type": "TEXT"},
-          {"name": "message_type", "type": "ENUM(text, photo, icebreaker)"},
+          {"name": "message_type", "type": "ENUM(text, photo)"},
           {"name": "is_read", "type": "BOOLEAN"},
-          {"name": "created_at", "type": "TIMESTAMP"}
-        ]
-      },
-      {
-        "name": "IcebreakerQuestion",
-        "description": "Вопросы для функции Ледокол",
-        "fields": [
-          {"name": "id", "type": "UUID", "primary_key": true},
-          {"name": "category", "type": "ENUM(general, hobbies, travel, food, entertainment, deep)"},
-          {"name": "question_text", "type": "TEXT"},
-          {"name": "difficulty", "type": "ENUM(light, medium, deep)"},
-          {"name": "usage_count", "type": "INTEGER"},
-          {"name": "success_rate", "type": "DECIMAL"},
-          {"name": "is_active", "type": "BOOLEAN"},
-          {"name": "created_at", "type": "TIMESTAMP"}
-        ]
-      },
-      {
-        "name": "IcebreakerUsage",
-        "description": "История использования ледоколов",
-        "fields": [
-          {"name": "id", "type": "UUID", "primary_key": true},
-          {"name": "question_id", "type": "UUID", "foreign_key": "IcebreakerQuestion.id"},
-          {"name": "sender_id", "type": "UUID", "foreign_key": "Profile.id"},
-          {"name": "recipient_id", "type": "UUID", "foreign_key": "Profile.id"},
-          {"name": "match_id", "type": "UUID", "foreign_key": "Match.id"},
-          {"name": "was_responded", "type": "BOOLEAN"},
           {"name": "created_at", "type": "TIMESTAMP"}
         ]
       },
@@ -425,11 +375,6 @@
         "triggers": ["chat_message_event", "notification"]
       },
       {
-        "name": "icebreaker_request",
-        "description": "Запрос вопроса ледокола",
-        "triggers": ["icebreaker_selection", "message_send"]
-      },
-      {
         "name": "profile_update",
         "description": "Обновление профиля пользователя",
         "triggers": ["primary_rating_recalculation"]
@@ -449,8 +394,7 @@
       "Match(user1_id, user2_id)",
       "Match(status)",
       "Message(match_id, created_at)",
-      "Rating(profile_id, combined_score)",
-      "IcebreakerQuestion(category, is_active)"
+      "Rating(profile_id, combined_score)"
     ]
   },
   "rating_system": {
@@ -571,24 +515,18 @@
     },
     {
       "id": "SC004",
-      "criterion": "Кнопка Ледокол отправляет случайный вопрос",
-      "measurement": "Процент пользователей, использующих ледокол хотя бы раз",
-      "target": "50%"
-    },
-    {
-      "id": "SC005",
       "criterion": "Система ранжирования работает корректно",
       "measurement": "Точность подбора анкет (релевантность топ-10)",
       "target": "85%"
     },
     {
-      "id": "SC006",
+      "id": "SC005",
       "criterion": "Производительность системы",
       "measurement": "Время загрузки анкеты (P95)",
       "target": "< 500ms"
     },
     {
-      "id": "SC007",
+      "id": "SC006",
       "criterion": "Кэш-эффективность",
       "measurement": "Redis cache hit rate",
       "target": "> 90%"
@@ -634,7 +572,6 @@
       "status": "pending",
       "deliverables": [
         "Celery задачи для пересчёта рейтингов",
-        "Функция Ледокол",
         "Идеи для свиданий",
         "Оптимизация БД и производительности",
         "Тестирование",

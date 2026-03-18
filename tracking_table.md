@@ -1,6 +1,5 @@
 # 📊 Таблица отслеживания задач
 
-**Проект:** ConnectMe — Dating-бот с функцией «Ледокол»  
 **Дата начала:** 2026-03-16  
 **Git-репозиторий:** git@github.com:DTYUI1/botDateWithLoveLoveLove.git
 
@@ -48,7 +47,6 @@
 |---|--------|-------------|--------|------|----------|
 | 4.1 | Настройка Celery (пересчёт рейтингов) | Backend Developer | ⬜ | — | celery_app.py |
 | 4.2 | Оптимизация БД (индексы) | Database Designer | ⬜ | — | database/indexes.sql |
-| 4.3 | Функция «Ледокол» | Telegram Bot Developer | ⬜ | — | handlers/icebreaker.py |
 | 4.4 | Идеи для свиданий | Backend Developer | ⬜ | — | api/v1/date_ideas.py |
 | 4.5 | Тестирование | QA Engineer | ⬜ | — | tests/ |
 | 4.6 | Деплой на сервер | DevOps Engineer | ⬜ | — | docker-compose.prod.yml |

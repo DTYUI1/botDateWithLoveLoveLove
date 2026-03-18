@@ -12,7 +12,7 @@
       "description": "Основной интерфейс взаимодействия с пользователями через Telegram. Обрабатывает команды, сообщения, медиа-контент и управляет сессиями.",
       "technologies": ["Python 3.11+", "aiogram 3.x", "aiohttp"],
       "functions": [
-        "Обработка команд: /start, /profile, /search, /icebreaker, /matches, /settings",
+        "Обработка команд: /start, /profile, /search, /matches, /settings",
         "Приём и отправка сообщений",
         "Рендеринг inline-клавиатур",
         "Обработка фотографий",
@@ -42,7 +42,6 @@
         {"target": "Profile Service", "type": "REST", "direction": "outbound", "description": "CRUD профилей"},
         {"target": "Matching Service", "type": "REST", "direction": "outbound", "description": "Подбор анкет, свайпы"},
         {"target": "Chat Service", "type": "REST", "direction": "outbound", "description": "Сообщения, мэтчи"},
-        {"target": "Icebreaker Service", "type": "REST", "direction": "outbound", "description": "Вопросы ледокола"},
         {"target": "Media Service", "type": "REST", "direction": "outbound", "description": "Загрузка фото"},
         {"target": "Telegram Bot Service", "type": "REST", "direction": "inbound", "description": "Входящие запросы"}
       ],
@@ -91,11 +90,10 @@
     },
     {
       "name": "Chat Service",
-      "description": "Обмен сообщениями между пользователями с активным мэтчем. Поддержка текстовых, icebreaker и медиа-сообщений.",
+      "description": "Обмен сообщениями между пользователями с активным мэтчем. Поддержка текстовых и медиа-сообщений.",
       "technologies": ["Python 3.11+", "FastAPI", "WebSockets", "RabbitMQ"],
       "functions": [
         "Отправка текстовых сообщений",
-        "Отправка icebreaker-вопросов",
         "Отправка фотографий",
         "Статус прочтения",
         "WebSocket для real-time",
@@ -107,26 +105,6 @@
         {"target": "Matching Service", "type": "REST", "direction": "outbound", "description": "Проверка мэтча"}
       ],
       "port": 8003,
-      "scaling": "horizontal"
-    },
-    {
-      "name": "Icebreaker Service",
-      "description": "Генерация и подбор вопросов для функции «Ледокол». Умный выбор на основе интересов, success rate и частоты использования.",
-      "technologies": ["Python 3.11+", "FastAPI", "PostgreSQL", "Weighted Random Selection"],
-      "functions": [
-        "Хранение базы вопросов по категориям",
-        "Категории: general, hobbies, travel, food, entertainment, deep",
-        "Уровни: light, medium, deep",
-        "Подбор с учётом интересов пользователя",
-        "Отслеживание статистики использования",
-        "A/B тестирование вопросов"
-      ],
-      "interactions": [
-        {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "icebreaker_questions, icebreaker_usage"},
-        {"target": "Profile Service", "type": "REST", "direction": "outbound", "description": "Получение интересов"},
-        {"target": "Chat Service", "type": "REST", "direction": "outbound", "description": "Вставка вопроса в сообщение"}
-      ],
-      "port": 8004,
       "scaling": "horizontal"
     },
     {
@@ -164,7 +142,7 @@
         {"target": "PostgreSQL", "type": "TCP", "direction": "bidirectional", "description": "Метаданные фото"},
         {"target": "Profile Service", "type": "REST", "direction": "inbound", "description": "Привязка к профилю"}
       ],
-      "port": 8005,
+      "port": 8004,
       "scaling": "horizontal"
     }
   ],
@@ -174,7 +152,7 @@
       "type": "database",
       "technologies": ["PostgreSQL 15+", "PostGIS", "pgBouncer"],
       "port": 5432,
-      "tables": ["users", "profiles", "photos", "swipes", "matches", "messages", "icebreaker_questions", "icebreaker_usage", "ratings", "date_ideas"],
+      "tables": ["users", "profiles", "photos", "swipes", "matches", "messages", "ratings", "date_ideas"],
       "description": "Основное хранилище структурированных данных с поддержкой гео-запросов"
     },
     {
@@ -224,13 +202,12 @@
       "port": 9000,
       "console_port": 9001,
       "buckets": [
-        {"name": "profile-photos", "access": "private", "description": "Фотографии профилей"},
-        {"name": "icebreaker-media", "access": "public", "description": "Медиа для ледокола"}
+        {"name": "profile-photos", "access": "private", "description": "Фотографии профилей"}
       ],
       "description": "S3-совместимое объектное хранилище"
     }
   ],
-  "architecture_diagram": "flowchart TB\n    subgraph Client[\"📱 Клиентский слой\"]\n        TG[Telegram Client]\n    end\n\n    subgraph Bot[\"🤖 Telegram Bot Service\"]\n        BotSvc[aiogram 3.x Bot]\n    end\n\n    subgraph API[\"🌐 API Gateway Layer\"]\n        APIGW[FastAPI API Gateway]\n    end\n\n    subgraph Services[\"🔧 Микросервисы\"]\n        ProfileSvc[Profile Service]\n        MatchingSvc[Matching Service]\n        ChatSvc[Chat Service]\n        IcebreakerSvc[Icebreaker Service]\n        RatingSvc[Rating Service]\n        MediaSvc[Media Service]\n    end\n\n    subgraph Queue[\"📨 Message Queue\"]\n        RabbitMQ[RabbitMQ]\n        SwipeEx[swipe_events]\n        MatchEx[match_events]\n        RatingEx[rating_updates]\n        ChatEx[chat_messages]\n    end\n\n    subgraph Tasks[\"⚙️ Task Queue\"]\n        Celery[Celery Worker]\n        Redis[(Redis)]\n    end\n\n    subgraph Storage[\"💾 Хранилища данных\"]\n        PostgreSQL[(PostgreSQL)]\n        Minio[(Minio S3)]\n    end\n\n    subgraph Monitoring[\"📊 Monitoring\"]\n        Prometheus[Prometheus]\n        Grafana[Grafana]\n    end\n\n    TG -->|commands, messages| BotSvc\n    BotSvc -->|REST API| APIGW\n    APIGW --> ProfileSvc\n    APIGW --> MatchingSvc\n    APIGW --> ChatSvc\n    APIGW --> IcebreakerSvc\n    APIGW --> MediaSvc\n    ProfileSvc --> PostgreSQL\n    MatchingSvc --> PostgreSQL\n    ChatSvc --> PostgreSQL\n    IcebreakerSvc --> PostgreSQL\n    RatingSvc --> PostgreSQL\n    MediaSvc --> PostgreSQL\n    MatchingSvc -.->|кэш 10 анкет| Redis\n    MatchingSvc -->|публикация событий| RabbitMQ\n    ChatSvc -->|публикация сообщений| RabbitMQ\n    RabbitMQ --> SwipeEx\n    RabbitMQ --> MatchEx\n    RabbitMQ --> RatingEx\n    RabbitMQ --> ChatEx\n    SwipeEx --> Celery\n    MatchEx --> Celery\n    RatingEx --> Celery\n    ChatEx --> Celery\n    Celery -->|брокер/результаты| Redis\n    Celery -->|запись рейтингов| PostgreSQL\n    MediaSvc -->|загрузка фото| Minio\n    ProfileSvc -.->|метрики| Prometheus\n    MatchingSvc -.->|метрики| Prometheus\n    ChatSvc -.->|метрики| Prometheus\n    IcebreakerSvc -.->|метрики| Prometheus\n    RabbitMQ -.->|метрики| Prometheus\n    Redis -.->|метрики| Prometheus\n    PostgreSQL -.->|метрики| Prometheus\n    Prometheus --> Grafana",
+  "architecture_diagram": "flowchart TB\n    subgraph Client[\"📱 Клиентский слой\"]\n        TG[Telegram Client]\n    end\n\n    subgraph Bot[\"🤖 Telegram Bot Service\"]\n        BotSvc[aiogram 3.x Bot]\n    end\n\n    subgraph API[\"🌐 API Gateway Layer\"]\n        APIGW[FastAPI API Gateway]\n    end\n\n    subgraph Services[\"🔧 Микросервисы\"]\n        ProfileSvc[Profile Service]\n        MatchingSvc[Matching Service]\n        ChatSvc[Chat Service]\n        RatingSvc[Rating Service]\n        MediaSvc[Media Service]\n    end\n\n    subgraph Queue[\"📨 Message Queue\"]\n        RabbitMQ[RabbitMQ]\n        SwipeEx[swipe_events]\n        MatchEx[match_events]\n        RatingEx[rating_updates]\n        ChatEx[chat_messages]\n    end\n\n    subgraph Tasks[\"⚙️ Task Queue\"]\n        Celery[Celery Worker]\n        Redis[(Redis)]\n    end\n\n    subgraph Storage[\"💾 Хранилища данных\"]\n        PostgreSQL[(PostgreSQL)]\n        Minio[(Minio S3)]\n    end\n\n    subgraph Monitoring[\"📊 Monitoring\"]\n        Prometheus[Prometheus]\n        Grafana[Grafana]\n    end\n\n    TG -->|commands, messages| BotSvc\n    BotSvc -->|REST API| APIGW\n    APIGW --> ProfileSvc\n    APIGW --> MatchingSvc\n    APIGW --> ChatSvc\n    APIGW --> MediaSvc\n    ProfileSvc --> PostgreSQL\n    MatchingSvc --> PostgreSQL\n    ChatSvc --> PostgreSQL\n    RatingSvc --> PostgreSQL\n    MediaSvc --> PostgreSQL\n    MatchingSvc -.->|кэш 10 анкет| Redis\n    MatchingSvc -->|публикация событий| RabbitMQ\n    ChatSvc -->|публикация сообщений| RabbitMQ\n    RabbitMQ --> SwipeEx\n    RabbitMQ --> MatchEx\n    RabbitMQ --> RatingEx\n    RabbitMQ --> ChatEx\n    SwipeEx --> Celery\n    MatchEx --> Celery\n    RatingEx --> Celery\n    ChatEx --> Celery\n    Celery -->|брокер/результаты| Redis\n    Celery -->|запись рейтингов| PostgreSQL\n    MediaSvc -->|загрузка фото| Minio\n    ProfileSvc -.->|метрики| Prometheus\n    MatchingSvc -.->|метрики| Prometheus\n    ChatSvc -.->|метрики| Prometheus\n    RatingSvc -.->|метрики| Prometheus\n    RabbitMQ -.->|метрики| Prometheus\n    Redis -.->|метрики| Prometheus\n    PostgreSQL -.->|метрики| Prometheus\n    Prometheus --> Grafana",
   "tech_stack": {
     "bot": {
       "framework": "aiogram 3.x",
@@ -274,7 +251,7 @@
     "storage": {
       "system": "Minio",
       "type": "S3-compatible",
-      "buckets": ["profile-photos (private)", "icebreaker-media (public)"],
+      "buckets": ["profile-photos (private)"],
       "description": "Объектное хранилище для медиа"
     }
   },
@@ -288,9 +265,7 @@
     {"path": "/api/v1/matching/swipe", "method": "POST", "description": "Лайк или пропуск анкеты", "auth": true, "body": {"profile_id": "UUID", "action": "like|pass"}},
     {"path": "/api/v1/matches", "method": "GET", "description": "Список активных мэтчей", "auth": true},
     {"path": "/api/v1/messages/{match_id}", "method": "GET", "description": "История сообщений с мэтчем", "auth": true},
-    {"path": "/api/v1/messages/{match_id}", "method": "POST", "description": "Отправка сообщения мэтчу", "auth": true, "body": {"content": "string", "type": "text|photo|icebreaker"}},
-    {"path": "/api/v1/icebreaker/get_question", "method": "POST", "description": "Получение случайного вопроса ледокола", "auth": true, "body": {"match_id": "UUID"}},
-    {"path": "/api/v1/icebreaker/categories", "method": "GET", "description": "Список категорий вопросов", "auth": true},
+    {"path": "/api/v1/messages/{match_id}", "method": "POST", "description": "Отправка сообщения мэтчу", "auth": true, "body": {"content": "string", "type": "text|photo"}},
     {"path": "/api/v1/rating/my", "method": "GET", "description": "Получение своего рейтинга", "auth": true},
     {"path": "/api/v1/media/upload-url", "method": "POST", "description": "Получение presigned URL для загрузки фото", "auth": true},
     {"path": "/api/v1/media/{photo_id}", "method": "GET", "description": "Получение presigned URL для скачивания фото", "auth": true},
@@ -331,21 +306,16 @@
     },
     {
       "id": "DF007",
-      "name": "Ледокол (icebreaker вопрос)",
-      "flow": "Telegram → Bot Service → API Gateway → Icebreaker Service → PostgreSQL (select question by interests, success_rate) → PostgreSQL (record usage) → Chat Service → PostgreSQL (message with type=icebreaker) → Bot Service → Telegram"
-    },
-    {
-      "id": "DF008",
       "name": "Ежедневный пересчёт рейтингов",
       "flow": "Celery Beat → Celery Worker → PostgreSQL (read swipes, matches) → Rating Service (calculate behavioral_score) → PostgreSQL (update combined_score)"
     },
     {
-      "id": "DF009",
+      "id": "DF008",
       "name": "Очистка сессий",
       "flow": "Celery Beat (hourly) → Celery Worker → Redis (delete expired session keys)"
     },
     {
-      "id": "DF010",
+      "id": "DF009",
       "name": "Агрегация аналитики",
       "flow": "Celery Beat (daily) → Celery Worker → PostgreSQL (aggregate metrics) → Prometheus (push metrics)"
     }
@@ -356,7 +326,6 @@
       {"name": "active_users_daily", "description": "Ежедневная активная аудитория", "type": "gauge"},
       {"name": "swipes_per_hour", "description": "Количество свайпов в час", "type": "gauge"},
       {"name": "matches_per_day", "description": "Количество мэтчей в день", "type": "counter"},
-      {"name": "icebreaker_usage_rate", "description": "Процент использования ледокола", "type": "gauge"},
       {"name": "message_exchange_rate", "description": "Количество сообщений в день", "type": "counter"}
     ],
     "technical": [
@@ -370,9 +339,8 @@
     "SC001": {"criterion": "Пользователь может создать анкету", "target": "80% completion rate"},
     "SC002": {"criterion": "Пользователь может лайкать анкеты", "target": "20+ swipes/day"},
     "SC003": {"criterion": "При мэтче открывается чат", "target": "60% match-to-message conversion"},
-    "SC004": {"criterion": "Кнопка Ледокол отправляет случайный вопрос", "target": "50% usage rate"},
-    "SC005": {"criterion": "Система ранжирования работает корректно", "target": "85% relevance accuracy"},
-    "SC006": {"criterion": "Производительность системы", "target": "<500ms P95 response time"},
-    "SC007": {"criterion": "Кэш-эффективность", "target": ">90% cache hit rate"}
+    "SC004": {"criterion": "Система ранжирования работает корректно", "target": "85% relevance accuracy"},
+    "SC005": {"criterion": "Производительность системы", "target": "<500ms P95 response time"},
+    "SC006": {"criterion": "Кэш-эффективность", "target": ">90% cache hit rate"}
   }
 }

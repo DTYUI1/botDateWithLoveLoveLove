@@ -1,10 +1,96 @@
 // ConnectMe Database Schema - DBML for dbdiagram.io
 // Проект: ConnectMe Dating Bot
-// Версия: 1.0.0
+// Версия: 2.0.0
 // Дата: 2026-03-16
 
 // ============================================================================
-// USERS & PROFILES
+// ENUMS
+// ============================================================================
+
+Enum gender_enum {
+  male
+  female
+  other
+}
+
+Enum looking_for_enum {
+  male
+  female
+  both
+}
+
+Enum relationship_goal_enum {
+  casual
+  serious
+  friendship
+  networking
+}
+
+Enum swipe_action_enum {
+  like
+  pass
+  super_like
+}
+
+Enum match_status_enum {
+  active
+  archived
+  blocked
+  unmatched
+}
+
+Enum moderation_status_enum {
+  pending
+  approved
+  rejected
+  under_review
+}
+
+Enum metric_type_enum {
+  counter
+  gauge
+  histogram
+}
+
+Enum date_category_enum {
+  cafe
+  activity
+  outdoor
+  cultural
+  entertainment
+}
+
+Enum cost_level_enum {
+  free
+  low
+  medium
+  high
+}
+
+Enum report_reason_enum {
+  spam
+  fake_profile
+  harassment
+  inappropriate_content
+  underage
+  other
+}
+
+Enum report_status_enum {
+  open
+  investigating
+  resolved
+  dismissed
+}
+
+Enum block_reason_enum {
+  manual
+  report
+  system
+}
+
+// ============================================================================
+// USERS & AUTHENTICATION
 // ============================================================================
 
 Table users {
@@ -14,7 +100,11 @@ Table users {
   first_name varchar(255) [not null]
   last_name varchar(255)
   language_code varchar(10) [default: 'ru']
-  is_bot boolean [default: false]
+  is_banned boolean [default: false]
+  ban_reason text
+  banned_at timestamptz
+  last_active_at timestamptz
+  deleted_at timestamptz
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 }
@@ -22,19 +112,25 @@ Table users {
 Table profiles {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [unique, not null, ref: > users.id]
-  age integer [check: `age >= 18`]
-  gender varchar(20) [not null, check: `gender IN ('male', 'female', 'other')`]
+  display_name varchar(100)
+  date_of_birth date [not null]
+  gender gender_enum [not null]
   bio text
+  height_cm smallint
   interests jsonb [default: `'[]'::jsonb`]
   city varchar(100)
+  country_code char(2)
   latitude decimal(9,6) [check: `latitude BETWEEN -90 AND 90`]
   longitude decimal(9,6) [check: `longitude BETWEEN -180 AND 180`]
-  looking_for varchar(20) [not null, check: `looking_for IN ('male', 'female', 'both')`]
-  age_range_min integer [default: 18, check: `age_range_min >= 18`]
-  age_range_max integer [default: 100, check: `age_range_max <= 100`]
-  distance_max_km integer [default: 100, check: `distance_max_km >= 1`]
+  location_updated_at timestamptz
+  looking_for looking_for_enum [not null]
+  age_range_min smallint [default: 18, check: `age_range_min >= 18`]
+  age_range_max smallint [default: 100, check: `age_range_max <= 100`]
+  distance_max_km smallint [default: 100, check: `distance_max_km BETWEEN 1 AND 500`]
   is_active boolean [default: true]
   is_verified boolean [default: false]
+  verified_at timestamptz
+  profile_completion_pct smallint [default: 0]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 }
@@ -43,9 +139,12 @@ Table preferences {
   id uuid [pk, default: `gen_random_uuid()`]
   profile_id uuid [unique, not null, ref: > profiles.id]
   preferred_cities jsonb [default: `'[]'::jsonb`]
+  preferred_countries jsonb [default: `'[]'::jsonb`]
   education_preference varchar(50)
   occupation_preference varchar(50)
-  relationship_goals varchar(50) [check: `relationship_goals IN ('casual', 'serious', 'friendship', 'networking')`]
+  relationship_goals relationship_goal_enum
+  height_min_cm smallint
+  height_max_cm smallint
   deal_breakers jsonb [default: `'[]'::jsonb`]
   importance_weights jsonb [default: `'{"age": 0.2, "distance": 0.3, "interests": 0.5}'::jsonb`]
   created_at timestamptz [default: `now()`]
@@ -57,14 +156,21 @@ Table photos {
   profile_id uuid [not null, ref: > profiles.id]
   s3_key varchar(500) [not null]
   s3_bucket varchar(100) [default: 'profile-photos']
+  thumbnail_s3_key varchar(500)
+  blurhash varchar(50)
   is_primary boolean [default: false]
-  "order" integer [default: 0]
-  file_size_bytes bigint
+  sort_order smallint [default: 0]
+  file_size_bytes integer
   mime_type varchar(50) [default: 'image/jpeg']
-  width integer
-  height integer
-  is_moderated boolean [default: false]
-  moderation_status varchar(20) [default: 'pending']
+  width smallint
+  height smallint
+  moderation_status moderation_status_enum [default: 'pending']
+  moderated_by uuid [ref: > users.id]
+  moderated_at timestamptz
+  rejection_reason text
+  nsfw_score decimal(3,2)
+  face_detected boolean
+  deleted_at timestamptz
   created_at timestamptz [default: `now()`]
 }
 
@@ -76,18 +182,24 @@ Table swipes {
   id uuid [pk, default: `gen_random_uuid()`]
   swiper_id uuid [not null, ref: > profiles.id]
   swiped_id uuid [not null, ref: > profiles.id]
-  action varchar(10) [not null, check: `action IN ('like', 'pass')`]
+  action swipe_action_enum [not null]
+  source varchar(20)
+  time_spent_ms integer
   context_data jsonb [default: `'{}'::jsonb`]
   created_at timestamptz [default: `now()`]
 }
 
 Table matches {
   id uuid [pk, default: `gen_random_uuid()`]
-  user1_id uuid [not null, ref: > profiles.id]
-  user2_id uuid [not null, ref: > profiles.id]
-  status varchar(20) [default: 'active', check: `status IN ('active', 'archived', 'blocked')`]
+  profile1_id uuid [not null, ref: > profiles.id]
+  profile2_id uuid [not null, ref: > profiles.id]
+  status match_status_enum [default: 'active']
   initiator_id uuid [ref: > profiles.id]
+  message_count integer [default: 0]
   last_message_at timestamptz
+  last_message_preview varchar(100)
+  unmatched_by uuid [ref: > profiles.id]
+  unmatched_at timestamptz
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 }
@@ -96,45 +208,45 @@ Table messages {
   id uuid [pk, default: `gen_random_uuid()`]
   match_id uuid [not null, ref: > matches.id]
   sender_id uuid [not null, ref: > profiles.id]
-  content text [not null]
-  message_type varchar(20) [default: 'text', check: `message_type IN ('text', 'photo', 'icebreaker', 'voice')`]
+  content text
+  message_type varchar(20) [default: 'text']
   media_urls jsonb [default: `'[]'::jsonb`]
   is_read boolean [default: false]
   read_at timestamptz
+  is_delivered boolean [default: false]
+  delivered_at timestamptz
   reply_to_id uuid [ref: > messages.id]
+  is_edited boolean [default: false]
+  edited_at timestamptz
+  deleted_at timestamptz
   created_at timestamptz [default: `now()`]
-  updated_at timestamptz [default: `now()`]
 }
 
 // ============================================================================
-// ICEBREAKER SYSTEM
+// SAFETY: REPORTS & BLOCKS
 // ============================================================================
 
-Table icebreaker_questions {
+Table reports {
   id uuid [pk, default: `gen_random_uuid()`]
-  category varchar(30) [not null, check: `category IN ('general', 'hobbies', 'travel', 'food', 'entertainment', 'deep', 'philosophical', 'funny')`]
-  question_text text [not null]
-  difficulty varchar(10) [default: 'light', check: `difficulty IN ('light', 'medium', 'deep')`]
-  tags jsonb [default: `'[]'::jsonb`]
-  usage_count integer [default: 0, check: `usage_count >= 0`]
-  success_rate decimal(5,4) [default: 0.5, check: `success_rate BETWEEN 0 AND 1`]
-  avg_response_time_sec integer
-  is_active boolean [default: true]
-  created_by uuid [ref: > users.id]
-  created_at timestamptz [default: `now()`]
-  updated_at timestamptz [default: `now()`]
-}
-
-Table icebreaker_usage {
-  id uuid [pk, default: `gen_random_uuid()`]
-  question_id uuid [not null, ref: > icebreaker_questions.id]
-  sender_id uuid [not null, ref: > profiles.id]
-  recipient_id uuid [not null, ref: > profiles.id]
-  match_id uuid [not null, ref: > matches.id]
+  reporter_profile_id uuid [not null, ref: > profiles.id]
+  reported_profile_id uuid [not null, ref: > profiles.id]
+  reason report_reason_enum [not null]
+  description text
+  evidence_urls jsonb [default: `'[]'::jsonb`]
   message_id uuid [ref: > messages.id]
-  was_responded boolean [default: false]
-  response_time_sec integer
-  conversation_started boolean [default: false]
+  status report_status_enum [default: 'open']
+  reviewed_by uuid [ref: > users.id]
+  reviewed_at timestamptz
+  resolution_notes text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
+
+Table blocks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  blocker_profile_id uuid [not null, ref: > profiles.id]
+  blocked_profile_id uuid [not null, ref: > profiles.id]
+  reason block_reason_enum [default: 'manual']
   created_at timestamptz [default: `now()`]
 }
 
@@ -147,9 +259,11 @@ Table ratings_primary {
   profile_id uuid [unique, not null, ref: > profiles.id]
   completeness_score decimal(5,4) [default: 0, check: `completeness_score BETWEEN 0 AND 1`]
   photo_score decimal(5,4) [default: 0, check: `photo_score BETWEEN 0 AND 1`]
+  photo_count smallint [default: 0]
   preference_match_score decimal(5,4) [default: 0, check: `preference_match_score BETWEEN 0 AND 1`]
   verification_bonus decimal(5,4) [default: 0, check: `verification_bonus BETWEEN 0 AND 1`]
-  total_score decimal(5,4) [default: 0]
+  total_score decimal(5,4) [default: 0, check: `total_score BETWEEN 0 AND 1`]
+  version integer [default: 1]
   calculated_at timestamptz [default: `now()`]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
@@ -157,13 +271,16 @@ Table ratings_primary {
 
 Table ratings_behavioral {
   id uuid [pk, default: `gen_random_uuid()`]
-  profile_id uuid [unique, not null, ref: > profiles.id]
+  profile_id uuid [not null, ref: > profiles.id]
+  like_received_count integer [default: 0]
+  pass_received_count integer [default: 0]
   like_count_score decimal(5,4) [default: 0, check: `like_count_score BETWEEN 0 AND 1`]
   like_pass_ratio_score decimal(5,4) [default: 0, check: `like_pass_ratio_score BETWEEN 0 AND 1`]
   match_rate_score decimal(5,4) [default: 0, check: `match_rate_score BETWEEN 0 AND 1`]
   conversation_initiation_score decimal(5,4) [default: 0, check: `conversation_initiation_score BETWEEN 0 AND 1`]
+  response_rate_score decimal(5,4) [default: 0, check: `response_rate_score BETWEEN 0 AND 1`]
   activity_pattern_score decimal(5,4) [default: 0, check: `activity_pattern_score BETWEEN 0 AND 1`]
-  total_score decimal(5,4) [default: 0]
+  total_score decimal(5,4) [default: 0, check: `total_score BETWEEN 0 AND 1`]
   period_start date [not null]
   period_end date [not null]
   calculated_at timestamptz [default: `now()`]
@@ -174,11 +291,15 @@ Table ratings_combined {
   id uuid [pk, default: `gen_random_uuid()`]
   profile_id uuid [unique, not null, ref: > profiles.id]
   primary_score decimal(5,4) [not null, check: `primary_score BETWEEN 0 AND 1`]
+  primary_weight decimal(3,2) [default: 0.40]
   behavioral_score decimal(5,4) [not null, check: `behavioral_score BETWEEN 0 AND 1`]
+  behavioral_weight decimal(3,2) [default: 0.50]
   referral_bonus decimal(5,4) [default: 0, check: `referral_bonus BETWEEN 0 AND 1`]
-  total_score decimal(5,4) [default: 0]
+  referral_weight decimal(3,2) [default: 0.10]
+  total_score decimal(5,4) [default: 0, check: `total_score BETWEEN 0 AND 1`]
   rank_position integer
   percentile decimal(5,4)
+  tier varchar(10)
   calculated_at timestamptz [default: `now()`]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
@@ -192,10 +313,12 @@ Table referrals {
   id uuid [pk, default: `gen_random_uuid()`]
   referrer_id uuid [not null, ref: > users.id]
   referred_id uuid [unique, not null, ref: > users.id]
-  referral_code varchar(50) [unique]
+  referral_code varchar(50) [unique, not null]
   bonus_earned decimal(10,2) [default: 0]
   referred_user_active boolean [default: false]
   referred_user_premium boolean [default: false]
+  referred_profile_created boolean [default: false]
+  referred_first_match boolean [default: false]
   created_at timestamptz [default: `now()`]
   activated_at timestamptz
 }
@@ -205,13 +328,52 @@ Table sessions {
   user_id uuid [not null, ref: > users.id]
   session_token varchar(255) [unique, not null]
   redis_cache_key varchar(255)
-  cached_profiles_count integer [default: 0]
-  current_profile_index integer [default: 0]
+  cached_profiles_count smallint [default: 0]
+  current_profile_index smallint [default: 0]
   last_profile_shown_at timestamptz
+  device_info jsonb
+  ip_address varchar(45)
   is_active boolean [default: true]
   expires_at timestamptz [not null]
+  last_heartbeat_at timestamptz
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
+}
+
+// ============================================================================
+// RATE LIMITING & ANTI-ABUSE
+// ============================================================================
+
+Table daily_limits {
+  id uuid [pk, default: `gen_random_uuid()`]
+  profile_id uuid [not null, ref: > profiles.id]
+  date date [not null, default: `CURRENT_DATE`]
+  swipes_count smallint [default: 0]
+  swipes_limit smallint [default: 50]
+  super_likes_count smallint [default: 0]
+  super_likes_limit smallint [default: 3]
+  messages_count smallint [default: 0]
+  messages_limit smallint [default: 200]
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  type varchar(30) [not null]
+  title varchar(200) [not null]
+  body text
+  data jsonb [default: `'{}'::jsonb`]
+  is_sent boolean [default: false]
+  sent_at timestamptz
+  is_read boolean [default: false]
+  read_at timestamptz
+  created_at timestamptz [default: `now()`]
 }
 
 // ============================================================================
@@ -221,7 +383,7 @@ Table sessions {
 Table metrics {
   id uuid [pk, default: `gen_random_uuid()`]
   metric_name varchar(100) [not null]
-  metric_type varchar(20) [not null, check: `metric_type IN ('counter', 'gauge', 'histogram')`]
+  metric_type metric_type_enum [not null]
   metric_value decimal(20,6) [not null]
   dimensions jsonb [default: `'{}'::jsonb`]
   period_start timestamptz [not null]
@@ -229,167 +391,40 @@ Table metrics {
   created_at timestamptz [default: `now()`]
 }
 
+// ============================================================================
+// CONTENT: DATE IDEAS
+// ============================================================================
+
 Table date_ideas {
   id uuid [pk, default: `gen_random_uuid()`]
-  category varchar(30) [not null, check: `category IN ('cafe', 'activity', 'outdoor', 'cultural', 'entertainment')`]
+  category date_category_enum [not null]
   title varchar(200) [not null]
   description text
-  avg_cost varchar(20) [check: `avg_cost IN ('free', 'low', 'medium', 'high')`]
+  avg_cost cost_level_enum
   suitable_interests jsonb [default: `'[]'::jsonb`]
   city varchar(100)
+  country_code char(2)
   latitude decimal(9,6)
   longitude decimal(9,6)
+  suggested_count integer [default: 0]
+  positive_feedback_count integer [default: 0]
   is_active boolean [default: true]
   created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
 }
 
 // ============================================================================
-// RELATIONSHIPS
+// AUDIT LOG
 // ============================================================================
 
-Ref: profiles.user_id > users.id
-
-Ref: preferences.profile_id > profiles.id
-
-Ref: photos.profile_id > profiles.id
-
-Ref: swipes.swiper_id > profiles.id
-Ref: swipes.swiped_id > profiles.id
-
-Ref: matches.user1_id > profiles.id
-Ref: matches.user2_id > profiles.id
-Ref: matches.initiator_id > profiles.id
-
-Ref: messages.match_id > matches.id
-Ref: messages.sender_id > profiles.id
-Ref: messages.reply_to_id > messages.id
-
-Ref: icebreaker_questions.created_by > users.id
-
-Ref: icebreaker_usage.question_id > icebreaker_questions.id
-Ref: icebreaker_usage.sender_id > profiles.id
-Ref: icebreaker_usage.recipient_id > profiles.id
-Ref: icebreaker_usage.match_id > matches.id
-Ref: icebreaker_usage.message_id > messages.id
-
-Ref: ratings_primary.profile_id > profiles.id
-
-Ref: ratings_behavioral.profile_id > profiles.id
-
-Ref: ratings_combined.profile_id > profiles.id
-
-Ref: referrals.referrer_id > users.id
-Ref: referrals.referred_id > users.id
-
-Ref: sessions.user_id > users.id
-
-// ============================================================================
-// INDEXES
-// ============================================================================
-
-// Users
-CREATE INDEX idx_users_telegram_id ON users(telegram_id);
-CREATE INDEX idx_users_created_at ON users(created_at);
-
-// Profiles
-CREATE INDEX idx_profiles_user_id ON profiles(user_id);
-CREATE INDEX idx_profiles_gender_looking_for ON profiles(gender, looking_for, is_active);
-CREATE INDEX idx_profiles_location ON profiles(city, latitude, longitude);
-CREATE INDEX idx_profiles_age_range ON profiles(age, is_active);
-CREATE INDEX idx_profiles_interests ON profiles USING GIN (interests);
-
-// Preferences
-CREATE INDEX idx_preferences_profile_id ON preferences(profile_id);
-
-// Photos
-CREATE INDEX idx_photos_profile_id ON photos(profile_id);
-CREATE INDEX idx_photos_primary ON photos(profile_id, is_primary);
-CREATE INDEX idx_photos_order ON photos(profile_id, order);
-
-// Swipes
-CREATE INDEX idx_swipes_swiper_id ON swipes(swiper_id);
-CREATE INDEX idx_swipes_swiped_id ON swipes(swiped_id);
-CREATE INDEX idx_swipes_pair ON swipes(swiper_id, swiped_id, action);
-CREATE INDEX idx_swipes_created_at ON swipes(created_at);
-CREATE INDEX idx_swipes_action ON swipes(action, created_at);
-CREATE UNIQUE INDEX uniq_swipes_pair ON swipes(swiper_id, swiped_id);
-
-// Matches
-CREATE INDEX idx_matches_user1_id ON matches(user1_id);
-CREATE INDEX idx_matches_user2_id ON matches(user2_id);
-CREATE INDEX idx_matches_status ON matches(status);
-CREATE INDEX idx_matches_users_combined ON matches(user1_id, user2_id, status);
-CREATE INDEX idx_matches_last_message ON matches(last_message_at DESC);
-CREATE UNIQUE INDEX uniq_matches_pair ON matches(user1_id, user2_id);
-
-// Messages
-CREATE INDEX idx_messages_match_id ON messages(match_id);
-CREATE INDEX idx_messages_match_created ON messages(match_id, created_at);
-CREATE INDEX idx_messages_sender_id ON messages(sender_id);
-CREATE INDEX idx_messages_is_read ON messages(is_read, created_at);
-CREATE INDEX idx_messages_type ON messages(message_type, created_at);
-
-// Icebreaker Questions
-CREATE INDEX idx_icebreaker_category ON icebreaker_questions(category, is_active);
-CREATE INDEX idx_icebreaker_difficulty ON icebreaker_questions(difficulty, is_active);
-CREATE INDEX idx_icebreaker_tags ON icebreaker_questions USING GIN (tags);
-CREATE INDEX idx_icebreaker_success_rate ON icebreaker_questions(success_rate DESC, is_active);
-CREATE INDEX idx_icebreaker_usage_count ON icebreaker_questions(usage_count ASC, is_active);
-
-// Icebreaker Usage
-CREATE INDEX idx_icebreaker_usage_question ON icebreaker_usage(question_id);
-CREATE INDEX idx_icebreaker_usage_sender ON icebreaker_usage(sender_id);
-CREATE INDEX idx_icebreaker_usage_match ON icebreaker_usage(match_id);
-CREATE INDEX idx_icebreaker_usage_responded ON icebreaker_usage(was_responded, created_at);
-CREATE INDEX idx_icebreaker_usage_created ON icebreaker_usage(created_at);
-
-// Ratings - Primary
-CREATE INDEX idx_ratings_primary_profile ON ratings_primary(profile_id);
-CREATE INDEX idx_ratings_primary_total ON ratings_primary(total_score DESC);
-CREATE INDEX idx_ratings_primary_calculated ON ratings_primary(calculated_at);
-
-// Ratings - Behavioral
-CREATE INDEX idx_ratings_behavioral_profile ON ratings_behavioral(profile_id);
-CREATE INDEX idx_ratings_behavioral_total ON ratings_behavioral(total_score DESC);
-CREATE INDEX idx_ratings_behavioral_period ON ratings_behavioral(period_start, period_end);
-CREATE INDEX idx_ratings_behavioral_calculated ON ratings_behavioral(calculated_at);
-
-// Ratings - Combined
-CREATE INDEX idx_ratings_combined_profile ON ratings_combined(profile_id);
-CREATE INDEX idx_ratings_combined_total ON ratings_combined(total_score DESC);
-CREATE INDEX idx_ratings_combined_rank ON ratings_combined(rank_position);
-CREATE INDEX idx_ratings_combined_percentile ON ratings_combined(percentile DESC);
-CREATE INDEX idx_ratings_combined_calculated ON ratings_combined(calculated_at);
-
-// Referrals
-CREATE INDEX idx_referrals_referrer ON referrals(referrer_id);
-CREATE INDEX idx_referrals_referred ON referrals(referred_id);
-CREATE INDEX idx_referrals_code ON referrals(referral_code);
-CREATE INDEX idx_referrals_active ON referrals(referred_user_active, created_at);
-
-// Sessions
-CREATE INDEX idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX idx_sessions_token ON sessions(session_token);
-CREATE INDEX idx_sessions_expires ON sessions(expires_at);
-CREATE INDEX idx_sessions_active ON sessions(is_active, expires_at);
-
-// Metrics
-CREATE INDEX idx_metrics_name ON metrics(metric_name);
-CREATE INDEX idx_metrics_period ON metrics(period_start, period_end);
-CREATE INDEX idx_metrics_name_period ON metrics(metric_name, period_start);
-CREATE INDEX idx_metrics_dimensions ON metrics USING GIN (dimensions);
-
-// Date Ideas
-CREATE INDEX idx_date_ideas_category ON date_ideas(category, is_active);
-CREATE INDEX idx_date_ideas_city ON date_ideas(city, is_active);
-CREATE INDEX idx_date_ideas_interests ON date_ideas USING GIN (suitable_interests);
-
-// ============================================================================
-// NOTES
-// ============================================================================
-
-// Note: Все таблицы используют UUID для распределённой системы
-// Note: TIMESTAMPTZ для работы с часовыми поясами
-// Note: JSONB с GIN индексами для гибких полей
-// Note: CHECK constraints для валидации на уровне БД
-// Note: Redis кэширование: ranked_profiles:{user_id}:{session_id} (10 анкет, TTL 3600с)
+Table audit_log {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id]
+  action varchar(50) [not null]
+  entity_type varchar(50) [not null]
+  entity_id uuid [not null]
+  old_values jsonb
+  new_values jsonb
+  ip_address varchar(45)
+  created_at timestamptz [default: `now()`]
+}

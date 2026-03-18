@@ -1,6 +1,5 @@
 # Отчёт по Этапу 1: Планирование и проектирование
 
-**Проект:** ConnectMe — Dating-бот с функцией «Ледокол»
 **Команда AI-агентов:** loveBot
 **Дата завершения:** 2026-03-16
 **Статус:** ✅ Завершено
@@ -18,13 +17,11 @@
 
 ## 1. Описание сервисов
 
-ConnectMe — микросервисная система для знакомств с функцией Icebreaker для застенчивых пользователей. Система состоит из 14 основных компонентов:
 
 ### 1.1 Telegram Bot Service
 **Назначение:** Основной интерфейс взаимодействия с пользователями через Telegram.
 
 **Функции:**
-- Обработка команд: `/start`, `/profile`, `/search`, `/icebreaker`, `/matches`, `/settings`
 - Приём и отправка сообщений, рендеринг inline-клавиатур
 - Обработка медиа-контента (фотографии), управление сессиями
 - Отправка уведомлений о мэтчах и сообщениях
@@ -85,7 +82,6 @@ ConnectMe — микросервисная система для знакомс�
 **Назначение:** Обмен сообщениями между пользователями с активным мэтчем.
 
 **Функции:**
-- Отправка текстовых сообщений, icebreaker-вопросов, фотографий
 - Статус прочтения сообщений, WebSocket для реального времени
 - История переписки
 
@@ -113,8 +109,6 @@ ConnectMe — микросервисная система для знакомс�
 
 ---
 
-### 1.7 Icebreaker Service
-**Назначение:** Генерация и подбор вопросов для функции «Ледокол».
 
 **Функции:**
 - Хранение базы вопросов по категориям: `general`, `hobbies`, `travel`, `food`, `entertainment`, `deep`
@@ -126,7 +120,6 @@ ConnectMe — микросервисная система для знакомс�
 
 **Порт:** `8004` (HTTP)
 
-**Таблицы:** `icebreaker_questions`, `icebreaker_usage`
 
 ---
 
@@ -142,7 +135,6 @@ ConnectMe — микросервисная система для знакомс�
 
 **Порт:** `8005` (HTTP)
 
-**Buckets:** `profile-photos` (private), `icebreaker-media` (public)
 
 ---
 
@@ -208,7 +200,6 @@ ConnectMe — микросервисная система для знакомс�
 ### 1.14 Metrics & Monitoring
 **Назначение:** Сбор и визуализация метрик системы.
 
-**Метрики:** `total_users`, `active_users_daily`, `swipes_per_hour`, `matches_per_day`, `icebreaker_usage_rate`, `cache_hit_rate` (>90%), `api_response_time_p95` (<500ms)
 
 **Технологии:** Prometheus, Grafana
 
@@ -238,7 +229,6 @@ flowchart TB
         ProfileSvc[Profile Service]
         MatchingSvc[Matching Service]
         ChatSvc[Chat Service]
-        IcebreakerSvc[Icebreaker Service]
         RatingSvc[Rating Service]
         MediaSvc[Media Service]
     end
@@ -271,12 +261,10 @@ flowchart TB
     APIGW --> ProfileSvc
     APIGW --> MatchingSvc
     APIGW --> ChatSvc
-    APIGW --> IcebreakerSvc
     APIGW --> MediaSvc
     ProfileSvc --> PostgreSQL
     MatchingSvc --> PostgreSQL
     ChatSvc --> PostgreSQL
-    IcebreakerSvc --> PostgreSQL
     RatingSvc --> PostgreSQL
     MediaSvc --> PostgreSQL
     MatchingSvc -.->|кэш 10 анкет| Redis
@@ -296,7 +284,6 @@ flowchart TB
     ProfileSvc -.->|метрики| Prometheus
     MatchingSvc -.->|метрики| Prometheus
     ChatSvc -.->|метрики| Prometheus
-    IcebreakerSvc -.->|метрики| Prometheus
     RabbitMQ -.->|метрики| Prometheus
     Redis -.->|метрики| Prometheus
     PostgreSQL -.->|метрики| Prometheus
@@ -314,7 +301,6 @@ flowchart TB
 | Profile Service | FastAPI + PostgreSQL | 8001 | CRUD профилей |
 | Matching Service | FastAPI + Redis | 8002 | Подбор и ранжирование |
 | Chat Service | FastAPI + WebSocket | 8003 | Обмен сообщениями |
-| Icebreaker Service | FastAPI + PostgreSQL | 8004 | Вопросы ледокола |
 | Rating Service | Celery + PostgreSQL | — | Расчёт рейтингов |
 | Media Service | FastAPI + Minio | 8005 | Хранение фото |
 | PostgreSQL | PostgreSQL 15+ | 5432 | Основное хранилище |
@@ -332,124 +318,81 @@ flowchart TB
 **Поток 1: Регистрация пользователя**
 ```
 Telegram → Bot Service → API Gateway → Profile Service → PostgreSQL
-                                    ↓
-                              Rating Service → PostgreSQL (создание рейтинга)
+                                                            ↓
+                                                    Rating Service → PostgreSQL (создание рейтинга)
 ```
 
 **Поток 2: Загрузка фотографии**
 ```
 Telegram → Bot Service → API Gateway → Media Service → Minio
-                                    ↓
-                              Profile Service → PostgreSQL (метаданные)
-                                    ↓
-                              Rating Service → PostgreSQL (обновление photo_score)
+                                                        ↓
+                                                Profile Service → PostgreSQL (метаданные)
+                                                        ↓
+                                                Rating Service → PostgreSQL (обновление photo_score)
 ```
 
 **Поток 3: Подбор анкет (с кэшированием)**
 ```
 Telegram → Bot Service → API Gateway → Matching Service → Redis (проверка кэша)
-                                                      ↓ (cache miss)
-                                              PostgreSQL (запрос анкет)
-                                                      ↓
-                                              Redis (запись 10 анкет)
-                                                      ↓
-                                              Bot Service → Telegram (показ анкеты)
+                                                            ↓ (cache miss)
+                                                    PostgreSQL (запрос анкет)
+                                                            ↓
+                                                    Redis (запись 10 анкет)
+                                                            ↓
+                                                    Bot Service → Telegram (показ анкеты)
 ```
 
 **Поток 4: Лайк анкеты**
 ```
 Telegram → Bot Service → API Gateway → Matching Service → PostgreSQL (запись swipe)
-                                                      ↓
-                                              RabbitMQ (swipe_events)
-                                                      ↓
-                                              Celery Worker → Rating Service
-                                                      ↓
-                                              PostgreSQL (обновление рейтинга)
+                                                                ↓
+                                                        RabbitMQ (swipe_events)
+                                                                ↓
+                                                        Celery Worker → Rating Service
+                                                                ↓
+                                                        PostgreSQL (обновление рейтинга)
 ```
 
 **Поток 5: Создание мэтча**
 ```
 Matching Service → PostgreSQL (проверка взаимного лайка)
-              ↓ (match found)
-        PostgreSQL (создание match)
-              ↓
-        RabbitMQ (match_events)
-              ↓
-        Celery Worker → Chat Service (создание чата)
-              ↓
-        Bot Service → Telegram (уведомление обоих пользователей)
+                        ↓ (match found)
+                    PostgreSQL (создание match)
+                        ↓
+                    RabbitMQ (match_events)
+                        ↓
+                    Celery Worker → Chat Service (создание чата)
+                        ↓
+                    Bot Service → Telegram (уведомление обоих пользователей)
 ```
 
 **Поток 6: Отправка сообщения**
 ```
 Telegram → Bot Service → API Gateway → Chat Service → PostgreSQL (сохранение)
-                                                    ↓
-                                            RabbitMQ (chat_messages)
-                                                    ↓
-                                            Bot Service → Telegram (доставка получателю)
-```
-
-**Поток 7: Ледокол (icebreaker вопрос)**
-```
-Telegram → Bot Service → API Gateway → Icebreaker Service → PostgreSQL (выбор вопроса)
-                                                          ↓
-                                                  PostgreSQL (запись usage)
-                                                          ↓
-                                                  Chat Service → PostgreSQL (сообщение)
-                                                          ↓
-                                                  Bot Service → Telegram (отправка)
+                                                            ↓
+                                                    RabbitMQ (chat_messages)
+                                                            ↓
+                                                    Bot Service → Telegram (доставка получателю)
+                                                            ↓
+                                                    PostgreSQL (запись usage)
+                                                            ↓
+                                                    Chat Service → PostgreSQL (сообщение)
+                                                            ↓
+                                                    Bot Service → Telegram (отправка)
 ```
 
 **Поток 8: Ежедневный пересчёт рейтингов**
 ```
 Celery Beat → Celery Worker → PostgreSQL (чтение свайпов, мэтчей)
-                          ↓
-                    Rating Service (расчёт behavioral_score)
-                          ↓
-                    PostgreSQL (обновление combined_score)
+                                    ↓
+                                Rating Service (расчёт behavioral_score)
+                                    ↓
+                                PostgreSQL (обновление combined_score)
 ```
 
----
-
-### 2.4 Функция «Ледокол» — sequence-диаграмма
-
-```mermaid
-sequenceDiagram
-    participant U as Пользователь
-    participant B as Bot Service
-    participant G as API Gateway
-    participant I as Icebreaker Service
-    participant C as Chat Service
-    participant DB as PostgreSQL
-    participant R as Recipient
-
-    U->>B: /icebreaker или кнопка 🧊 Ледокол
-    B->>G: POST /api/v1/icebreaker/get_question<br/>{match_id, user_id}
-    G->>I: Запрос вопроса
-    I->>DB: SELECT вопрос WHERE<br/>category IN (interests)<br/>ORDER BY success_rate DESC<br/>LIMIT 1
-    DB-->>I: Вопрос + метаданные
-    I->>DB: INSERT icebreaker_usage<br/>(question_id, sender_id,<br/>recipient_id, match_id)
-    DB-->>I: OK
-    I-->>G: {question_text, category,<br/>difficulty, question_id}
-    G-->>B: Вопрос для отправки
-    B->>C: POST /api/v1/messages/send<br/>{match_id, content, type: icebreaker}
-    C->>DB: INSERT message<br/>(match_id, sender_id,<br/>content, message_type)
-    DB-->>C: OK
-    C-->>B: Message created
-    B->>U: 🧊 Вопрос отправлен!<br/>"{{question_text}}"
-    B->>R: 💬 Новое сообщение от матча!<br/>"{{question_text}}"
-
-    Note over I,R: Вопрос помечается как<br/>message_type = 'icebreaker'<br/>для аналитики
-```
-
-**Детали функции «Ледокол»:**
 
 | Шаг | Описание |
 |-----|----------|
-| 1 | Пользователь нажимает кнопку «🧊 Ледокол» или вводит `/icebreaker` |
-| 2 | Icebreaker Service подбирает вопрос по категориям интересов с приоритетом success_rate |
-| 3 | Вопрос отправляется как сообщение типа `icebreaker` |
-| 4 | Запись в `icebreaker_usage` для отслеживания эффективности |
 
 **Категории вопросов:** `general`, `hobbies`, `travel`, `food`, `entertainment`, `deep`, `philosophical`, `funny`
 
@@ -461,154 +404,10 @@ sequenceDiagram
 
 ### 3.1 ER-диаграмма
 
-Для визуализации схемы базы данных:
+![ER-диаграмма базы данных ConnectMe](DB.png)
 
-1. Откройте сайт [dbdiagram.io](https://dbdiagram.io)
-2. Скопируйте DBML-код ниже
-3. Вставьте в редактор на сайте
+См. полный файл: dbdiagram.dbml
 
-```dbml
-// ConnectMe Database Schema - DBML for dbdiagram.io
-// Проект: ConnectMe Dating Bot
-// Версия: 1.0.0
-// Дата: 2026-03-16
-
-Table users {
-  id uuid [pk, default: `gen_random_uuid()`]
-  telegram_id bigint [unique, not null]
-  username varchar(255)
-  first_name varchar(255) [not null]
-  last_name varchar(255)
-  language_code varchar(10) [default: 'ru']
-  is_bot boolean [default: false]
-  created_at timestamptz [default: `now()`]
-  updated_at timestamptz [default: `now()`]
-}
-
-Table profiles {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [unique, not null, ref: > users.id]
-  age integer [check: `age >= 18`]
-  gender varchar(20) [not null, check: `gender IN ('male', 'female', 'other')`]
-  bio text
-  interests jsonb [default: `'[]'::jsonb`]
-  city varchar(100)
-  latitude decimal(9,6) [check: `latitude BETWEEN -90 AND 90`]
-  longitude decimal(9,6) [check: `longitude BETWEEN -180 AND 180`]
-  looking_for varchar(20) [not null, check: `looking_for IN ('male', 'female', 'both')`]
-  age_range_min integer [default: 18]
-  age_range_max integer [default: 100]
-  distance_max_km integer [default: 100]
-  is_active boolean [default: true]
-  is_verified boolean [default: false]
-  created_at timestamptz [default: `now()`]
-  updated_at timestamptz [default: `now()`]
-}
-
-Table swipes {
-  id uuid [pk, default: `gen_random_uuid()`]
-  swiper_id uuid [not null, ref: > profiles.id]
-  swiped_id uuid [not null, ref: > profiles.id]
-  action varchar(10) [not null, check: `action IN ('like', 'pass')`]
-  created_at timestamptz [default: `now()`]
-}
-
-Table matches {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user1_id uuid [not null, ref: > profiles.id]
-  user2_id uuid [not null, ref: > profiles.id]
-  status varchar(20) [default: 'active']
-  created_at timestamptz [default: `now()`]
-  updated_at timestamptz [default: `now()`]
-}
-
-Table messages {
-  id uuid [pk, default: `gen_random_uuid()`]
-  match_id uuid [not null, ref: > matches.id]
-  sender_id uuid [not null, ref: > profiles.id]
-  content text [not null]
-  message_type varchar(20) [default: 'text', check: `message_type IN ('text', 'photo', 'icebreaker', 'voice')`]
-  is_read boolean [default: false]
-  created_at timestamptz [default: `now()`]
-}
-
-Table icebreaker_questions {
-  id uuid [pk, default: `gen_random_uuid()`]
-  category varchar(30) [not null]
-  question_text text [not null]
-  difficulty varchar(10) [default: 'light']
-  usage_count integer [default: 0]
-  success_rate decimal(5,4) [default: 0.5]
-  is_active boolean [default: true]
-  created_at timestamptz [default: `now()`]
-}
-
-Table icebreaker_usage {
-  id uuid [pk, default: `gen_random_uuid()`]
-  question_id uuid [not null, ref: > icebreaker_questions.id]
-  sender_id uuid [not null, ref: > profiles.id]
-  recipient_id uuid [not null, ref: > profiles.id]
-  match_id uuid [not null, ref: > matches.id]
-  was_responded boolean [default: false]
-  created_at timestamptz [default: `now()`]
-}
-
-Table ratings_primary {
-  id uuid [pk, default: `gen_random_uuid()`]
-  profile_id uuid [unique, not null, ref: > profiles.id]
-  completeness_score decimal(5,4) [default: 0]
-  photo_score decimal(5,4) [default: 0]
-  preference_match_score decimal(5,4) [default: 0]
-  verification_bonus decimal(5,4) [default: 0]
-  total_score decimal(5,4) [default: 0]
-  calculated_at timestamptz [default: `now()`]
-  created_at timestamptz [default: `now()`]
-}
-
-Table ratings_behavioral {
-  id uuid [pk, default: `gen_random_uuid()`]
-  profile_id uuid [unique, not null, ref: > profiles.id]
-  like_count_score decimal(5,4) [default: 0]
-  like_pass_ratio_score decimal(5,4) [default: 0]
-  match_rate_score decimal(5,4) [default: 0]
-  conversation_initiation_score decimal(5,4) [default: 0]
-  activity_pattern_score decimal(5,4) [default: 0]
-  total_score decimal(5,4) [default: 0]
-  period_start date [not null]
-  period_end date [not null]
-  calculated_at timestamptz [default: `now()`]
-}
-
-Table ratings_combined {
-  id uuid [pk, default: `gen_random_uuid()`]
-  profile_id uuid [unique, not null, ref: > profiles.id]
-  primary_score decimal(5,4) [not null]
-  behavioral_score decimal(5,4) [not null]
-  referral_bonus decimal(5,4) [default: 0]
-  total_score decimal(5,4) [default: 0]
-  rank_position integer
-  percentile decimal(5,4)
-  calculated_at timestamptz [default: `now()`]
-  created_at timestamptz [default: `now()`]
-  updated_at timestamptz [default: `now()`]
-}
-
-Ref: profiles.user_id > users.id
-Ref: swipes.swiper_id > profiles.id
-Ref: swipes.swiped_id > profiles.id
-Ref: matches.user1_id > profiles.id
-Ref: matches.user2_id > profiles.id
-Ref: messages.match_id > matches.id
-Ref: messages.sender_id > profiles.id
-Ref: icebreaker_questions.created_by > users.id
-Ref: icebreaker_usage.question_id > icebreaker_questions.id
-Ref: icebreaker_usage.sender_id > profiles.id
-Ref: icebreaker_usage.recipient_id > profiles.id
-Ref: icebreaker_usage.match_id > matches.id
-Ref: ratings_primary.profile_id > profiles.id
-Ref: ratings_behavioral.profile_id > profiles.id
-Ref: ratings_combined.profile_id > profiles.id
-```
 
 ---
 
@@ -616,16 +415,25 @@ Ref: ratings_combined.profile_id > profiles.id
 
 | Таблица | Описание | Ключевые поля |
 |---------|----------|---------------|
-| `users` | Базовая сущность Telegram | `telegram_id`, `username`, `first_name` |
-| `profiles` | Расширенный профиль для знакомств | `age`, `gender`, `interests`, `location`, `looking_for` |
-| `swipes` | История лайков/пропусков | `swiper_id`, `swiped_id`, `action` |
-| `matches` | Взаимные лайки | `user1_id`, `user2_id`, `status` |
-| `messages` | Сообщения в чате | `match_id`, `sender_id`, `content`, `message_type` |
-| `icebreaker_questions` | База вопросов ледокола | `category`, `question_text`, `difficulty`, `success_rate` |
-| `icebreaker_usage` | История использования ледоколов | `question_id`, `sender_id`, `was_responded` |
-| `ratings_primary` | Первичный рейтинг анкеты | `completeness_score`, `photo_score`, `total_score` |
-| `ratings_behavioral` | Поведенческий рейтинг | `like_count_score`, `match_rate_score`, `total_score` |
-| `ratings_combined` | Комбинированный рейтинг | `primary_score`, `behavioral_score`, `referral_bonus`, `rank_position` |
+| `users` | Базовая сущность Telegram | `telegram_id`, `username`, `is_banned`, `deleted_at` |
+| `profiles` | Расширенный профиль для знакомств | `date_of_birth`, `gender` (enum), `interests`, `location`, `looking_for` (enum) |
+| `preferences` | Детальные предпочтения | `preferred_cities`, `relationship_goals` (enum), `importance_weights` |
+| `photos` | Метаданные фотографий | `s3_key`, `moderation_status` (enum), `nsfw_score`, `face_detected` |
+| `swipes` | История лайков/пропусков | `swiper_id`, `swiped_id`, `action` (enum), `source`, `time_spent_ms` |
+| `matches` | Взаимные лайки | `profile1_id`, `profile2_id`, `status` (enum), `message_count` |
+| `messages` | Сообщения в чате | `match_id`, `sender_id`, `content`, `message_type`, `is_delivered` |
+| `reports` | Жалобы на модерацию | `reporter_profile_id`, `reported_profile_id`, `reason` (enum), `status` |
+| `blocks` | Блокировки пользователей | `blocker_profile_id`, `blocked_profile_id`, `reason` |
+| `ratings_primary` | Первичный рейтинг анкеты | `completeness_score`, `photo_score`, `photo_count`, `total_score` |
+| `ratings_behavioral` | Поведенческий рейтинг | `like_received_count`, `like_count_score`, `response_rate_score`, `total_score` |
+| `ratings_combined` | Комбинированный рейтинг | `primary_score`, `behavioral_score`, `tier`, `rank_position` |
+| `referrals` | Реферальная программа | `referrer_id`, `referred_id`, `referral_code`, `referred_first_match` |
+| `sessions` | Сессии пользователей | `user_id`, `session_token`, `device_info`, `expires_at` |
+| `daily_limits` | Rate limiting | `profile_id`, `date`, `swipes_count`, `swipes_limit` |
+| `notifications` | Уведомления | `user_id`, `type`, `title`, `is_read` |
+| `metrics` | Агрегированные метрики | `metric_name`, `metric_type` (enum), `metric_value`, `dimensions` |
+| `date_ideas` | Идеи для свиданий | `category` (enum), `title`, `avg_cost` (enum), `suggested_count` |
+| `audit_log` | Лог аудита | `user_id`, `action`, `entity_type`, `old_values`, `new_values` |
 
 ---
 

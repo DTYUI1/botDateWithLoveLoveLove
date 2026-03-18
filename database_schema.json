@@ -1,11 +1,61 @@
 {
   "schema_info": {
     "project": "ConnectMe",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "created_date": "2026-03-16",
     "database_type": "PostgreSQL 15+",
-    "description": "Схема базы данных для dating-бота с icebreaker-вопросами"
+    "description": "Схема базы данных для dating-бота (улучшенная)"
   },
+  "enums": [
+    {
+      "name": "gender_enum",
+      "values": ["male", "female", "other"]
+    },
+    {
+      "name": "looking_for_enum",
+      "values": ["male", "female", "both"]
+    },
+    {
+      "name": "relationship_goal_enum",
+      "values": ["casual", "serious", "friendship", "networking"]
+    },
+    {
+      "name": "swipe_action_enum",
+      "values": ["like", "pass", "super_like"]
+    },
+    {
+      "name": "match_status_enum",
+      "values": ["active", "archived", "blocked", "unmatched"]
+    },
+    {
+      "name": "moderation_status_enum",
+      "values": ["pending", "approved", "rejected", "under_review"]
+    },
+    {
+      "name": "metric_type_enum",
+      "values": ["counter", "gauge", "histogram"]
+    },
+    {
+      "name": "date_category_enum",
+      "values": ["cafe", "activity", "outdoor", "cultural", "entertainment"]
+    },
+    {
+      "name": "cost_level_enum",
+      "values": ["free", "low", "medium", "high"]
+    },
+    {
+      "name": "report_reason_enum",
+      "values": ["spam", "fake_profile", "harassment", "inappropriate_content", "underage", "other"]
+    },
+    {
+      "name": "report_status_enum",
+      "values": ["open", "investigating", "resolved", "dismissed"]
+    },
+    {
+      "name": "block_reason_enum",
+      "values": ["manual", "report", "system"]
+    }
+  ],
   "tables": [
     {
       "name": "users",
@@ -17,11 +67,15 @@
         {"name": "first_name", "type": "VARCHAR(255)", "constraints": "NOT NULL"},
         {"name": "last_name", "type": "VARCHAR(255)", "constraints": null},
         {"name": "language_code", "type": "VARCHAR(10)", "constraints": "DEFAULT 'ru'"},
-        {"name": "is_bot", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "is_banned", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "ban_reason", "type": "TEXT", "constraints": null},
+        {"name": "banned_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "last_active_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "deleted_at", "type": "TIMESTAMPTZ", "constraints": null},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_users_telegram_id", "idx_users_created_at"],
+      "indexes": ["idx_users_telegram_id", "idx_users_last_active"],
       "foreign_keys": []
     },
     {
@@ -30,23 +84,29 @@
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "user_id", "type": "UUID", "constraints": "UNIQUE NOT NULL REFERENCES users(id)"},
-        {"name": "age", "type": "INTEGER", "constraints": "CHECK (age >= 18)"},
-        {"name": "gender", "type": "VARCHAR(20)", "constraints": "NOT NULL CHECK (gender IN ('male', 'female', 'other'))"},
+        {"name": "display_name", "type": "VARCHAR(100)", "constraints": null},
+        {"name": "date_of_birth", "type": "DATE", "constraints": "NOT NULL"},
+        {"name": "gender", "type": "gender_enum", "constraints": "NOT NULL"},
         {"name": "bio", "type": "TEXT", "constraints": null},
+        {"name": "height_cm", "type": "SMALLINT", "constraints": null},
         {"name": "interests", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
         {"name": "city", "type": "VARCHAR(100)", "constraints": null},
+        {"name": "country_code", "type": "CHAR(2)", "constraints": null},
         {"name": "latitude", "type": "DECIMAL(9,6)", "constraints": "CHECK (latitude BETWEEN -90 AND 90)"},
         {"name": "longitude", "type": "DECIMAL(9,6)", "constraints": "CHECK (longitude BETWEEN -180 AND 180)"},
-        {"name": "looking_for", "type": "VARCHAR(20)", "constraints": "NOT NULL CHECK (looking_for IN ('male', 'female', 'both'))"},
-        {"name": "age_range_min", "type": "INTEGER", "constraints": "DEFAULT 18 CHECK (age_range_min >= 18)"},
-        {"name": "age_range_max", "type": "INTEGER", "constraints": "DEFAULT 100 CHECK (age_range_max <= 100)"},
-        {"name": "distance_max_km", "type": "INTEGER", "constraints": "DEFAULT 100 CHECK (distance_max_km >= 1)"},
+        {"name": "location_updated_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "looking_for", "type": "looking_for_enum", "constraints": "NOT NULL"},
+        {"name": "age_range_min", "type": "SMALLINT", "constraints": "DEFAULT 18 CHECK (age_range_min >= 18)"},
+        {"name": "age_range_max", "type": "SMALLINT", "constraints": "DEFAULT 100 CHECK (age_range_max <= 100)"},
+        {"name": "distance_max_km", "type": "SMALLINT", "constraints": "DEFAULT 100 CHECK (distance_max_km BETWEEN 1 AND 500)"},
         {"name": "is_active", "type": "BOOLEAN", "constraints": "DEFAULT TRUE"},
         {"name": "is_verified", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "verified_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "profile_completion_pct", "type": "SMALLINT", "constraints": "DEFAULT 0"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_profiles_user_id", "idx_profiles_gender_looking_for", "idx_profiles_location", "idx_profiles_age_range", "idx_profiles_interests"],
+      "indexes": ["idx_profiles_user_id", "idx_profiles_active_gender", "idx_profiles_city", "idx_profiles_location", "idx_profiles_dob", "idx_profiles_interests"],
       "foreign_keys": [{"column": "user_id", "references": "users(id)"}]
     },
     {
@@ -56,9 +116,12 @@
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "profile_id", "type": "UUID", "constraints": "UNIQUE NOT NULL REFERENCES profiles(id)"},
         {"name": "preferred_cities", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
+        {"name": "preferred_countries", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
         {"name": "education_preference", "type": "VARCHAR(50)", "constraints": null},
         {"name": "occupation_preference", "type": "VARCHAR(50)", "constraints": null},
-        {"name": "relationship_goals", "type": "VARCHAR(50)", "constraints": "CHECK (relationship_goals IN ('casual', 'serious', 'friendship', 'networking'))"},
+        {"name": "relationship_goals", "type": "relationship_goal_enum", "constraints": null},
+        {"name": "height_min_cm", "type": "SMALLINT", "constraints": null},
+        {"name": "height_max_cm", "type": "SMALLINT", "constraints": null},
         {"name": "deal_breakers", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
         {"name": "importance_weights", "type": "JSONB", "constraints": "DEFAULT '{\"age\": 0.2, \"distance\": 0.3, \"interests\": 0.5}'::jsonb"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
@@ -68,17 +131,47 @@
       "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}]
     },
     {
+      "name": "photos",
+      "description": "Метаданные фотографий профилей с AI-модерацией",
+      "columns": [
+        {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
+        {"name": "profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "s3_key", "type": "VARCHAR(500)", "constraints": "NOT NULL"},
+        {"name": "s3_bucket", "type": "VARCHAR(100)", "constraints": "DEFAULT 'profile-photos'"},
+        {"name": "thumbnail_s3_key", "type": "VARCHAR(500)", "constraints": null},
+        {"name": "blurhash", "type": "VARCHAR(50)", "constraints": null},
+        {"name": "is_primary", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "sort_order", "type": "SMALLINT", "constraints": "DEFAULT 0"},
+        {"name": "file_size_bytes", "type": "INTEGER", "constraints": null},
+        {"name": "mime_type", "type": "VARCHAR(50)", "constraints": "DEFAULT 'image/jpeg'"},
+        {"name": "width", "type": "SMALLINT", "constraints": null},
+        {"name": "height", "type": "SMALLINT", "constraints": null},
+        {"name": "moderation_status", "type": "moderation_status_enum", "constraints": "DEFAULT 'pending'"},
+        {"name": "moderated_by", "type": "UUID", "constraints": "REFERENCES users(id)"},
+        {"name": "moderated_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "rejection_reason", "type": "TEXT", "constraints": null},
+        {"name": "nsfw_score", "type": "DECIMAL(3,2)", "constraints": null},
+        {"name": "face_detected", "type": "BOOLEAN", "constraints": null},
+        {"name": "deleted_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
+      ],
+      "indexes": ["idx_photos_profile", "idx_photos_primary"],
+      "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}, {"column": "moderated_by", "references": "users(id)"}]
+    },
+    {
       "name": "swipes",
       "description": "История действий пользователей (лайки/пропуски)",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "swiper_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
         {"name": "swiped_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "action", "type": "VARCHAR(10)", "constraints": "NOT NULL CHECK (action IN ('like', 'pass'))"},
+        {"name": "action", "type": "swipe_action_enum", "constraints": "NOT NULL"},
+        {"name": "source", "type": "VARCHAR(20)", "constraints": null},
+        {"name": "time_spent_ms", "type": "INTEGER", "constraints": null},
         {"name": "context_data", "type": "JSONB", "constraints": "DEFAULT '{}'::jsonb"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_swipes_swiper_id", "idx_swipes_swiped_id", "idx_swipes_pair", "idx_swipes_created_at", "idx_swipes_action", "uniq_swipes_pair"],
+      "indexes": ["idx_swipes_pair", "idx_swipes_swiped", "idx_swipes_created"],
       "foreign_keys": [
         {"column": "swiper_id", "references": "profiles(id)"},
         {"column": "swiped_id", "references": "profiles(id)"}
@@ -89,19 +182,24 @@
       "description": "Взаимные лайки (мэтчи)",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
-        {"name": "user1_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "user2_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "status", "type": "VARCHAR(20)", "constraints": "DEFAULT 'active' CHECK (status IN ('active', 'archived', 'blocked'))"},
+        {"name": "profile1_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "profile2_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "status", "type": "match_status_enum", "constraints": "DEFAULT 'active'"},
         {"name": "initiator_id", "type": "UUID", "constraints": "REFERENCES profiles(id)"},
+        {"name": "message_count", "type": "INTEGER", "constraints": "DEFAULT 0"},
         {"name": "last_message_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "last_message_preview", "type": "VARCHAR(100)", "constraints": null},
+        {"name": "unmatched_by", "type": "UUID", "constraints": "REFERENCES profiles(id)"},
+        {"name": "unmatched_at", "type": "TIMESTAMPTZ", "constraints": null},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_matches_user1_id", "idx_matches_user2_id", "idx_matches_status", "idx_matches_users_combined", "idx_matches_last_message", "uniq_matches_pair"],
+      "indexes": ["idx_matches_pair", "idx_matches_profile1", "idx_matches_profile2", "idx_matches_last_msg"],
       "foreign_keys": [
-        {"column": "user1_id", "references": "profiles(id)"},
-        {"column": "user2_id", "references": "profiles(id)"},
-        {"column": "initiator_id", "references": "profiles(id)"}
+        {"column": "profile1_id", "references": "profiles(id)"},
+        {"column": "profile2_id", "references": "profiles(id)"},
+        {"column": "initiator_id", "references": "profiles(id)"},
+        {"column": "unmatched_by", "references": "profiles(id)"}
       ]
     },
     {
@@ -111,16 +209,20 @@
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "match_id", "type": "UUID", "constraints": "NOT NULL REFERENCES matches(id)"},
         {"name": "sender_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "content", "type": "TEXT", "constraints": "NOT NULL"},
-        {"name": "message_type", "type": "VARCHAR(20)", "constraints": "DEFAULT 'text' CHECK (message_type IN ('text', 'photo', 'icebreaker', 'voice'))"},
+        {"name": "content", "type": "TEXT", "constraints": null},
+        {"name": "message_type", "type": "VARCHAR(20)", "constraints": "DEFAULT 'text'"},
         {"name": "media_urls", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
         {"name": "is_read", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
         {"name": "read_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "is_delivered", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "delivered_at", "type": "TIMESTAMPTZ", "constraints": null},
         {"name": "reply_to_id", "type": "UUID", "constraints": "REFERENCES messages(id)"},
-        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
-        {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
+        {"name": "is_edited", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "edited_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "deleted_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_messages_match_id", "idx_messages_match_created", "idx_messages_sender_id", "idx_messages_is_read", "idx_messages_type"],
+      "indexes": ["idx_messages_match", "idx_messages_unread"],
       "foreign_keys": [
         {"column": "match_id", "references": "matches(id)"},
         {"column": "sender_id", "references": "profiles(id)"},
@@ -128,104 +230,111 @@
       ]
     },
     {
-      "name": "icebreaker_questions",
-      "description": "База вопросов для функции «Ледокол»",
+      "name": "reports",
+      "description": "Жалобы пользователей на модерацию",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
-        {"name": "category", "type": "VARCHAR(30)", "constraints": "NOT NULL CHECK (category IN ('general', 'hobbies', 'travel', 'food', 'entertainment', 'deep', 'philosophical', 'funny'))"},
-        {"name": "question_text", "type": "TEXT", "constraints": "NOT NULL"},
-        {"name": "difficulty", "type": "VARCHAR(10)", "constraints": "DEFAULT 'light' CHECK (difficulty IN ('light', 'medium', 'deep'))"},
-        {"name": "tags", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
-        {"name": "usage_count", "type": "INTEGER", "constraints": "DEFAULT 0 CHECK (usage_count >= 0)"},
-        {"name": "success_rate", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0.5 CHECK (success_rate BETWEEN 0 AND 1)"},
-        {"name": "avg_response_time_sec", "type": "INTEGER", "constraints": null},
-        {"name": "is_active", "type": "BOOLEAN", "constraints": "DEFAULT TRUE"},
-        {"name": "created_by", "type": "UUID", "constraints": "REFERENCES users(id)"},
+        {"name": "reporter_profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "reported_profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "reason", "type": "report_reason_enum", "constraints": "NOT NULL"},
+        {"name": "description", "type": "TEXT", "constraints": null},
+        {"name": "evidence_urls", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
+        {"name": "message_id", "type": "UUID", "constraints": "REFERENCES messages(id)"},
+        {"name": "status", "type": "report_status_enum", "constraints": "DEFAULT 'open'"},
+        {"name": "reviewed_by", "type": "UUID", "constraints": "REFERENCES users(id)"},
+        {"name": "reviewed_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "resolution_notes", "type": "TEXT", "constraints": null},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_icebreaker_category", "idx_icebreaker_difficulty", "idx_icebreaker_tags", "idx_icebreaker_success_rate", "idx_icebreaker_usage_count"],
-      "foreign_keys": [{"column": "created_by", "references": "users(id)"}]
+      "indexes": ["idx_reports_status", "idx_reports_reported"],
+      "foreign_keys": [
+        {"column": "reporter_profile_id", "references": "profiles(id)"},
+        {"column": "reported_profile_id", "references": "profiles(id)"},
+        {"column": "message_id", "references": "messages(id)"},
+        {"column": "reviewed_by", "references": "users(id)"}
+      ]
     },
     {
-      "name": "icebreaker_usage",
-      "description": "История использования icebreaker-вопросов для аналитики",
+      "name": "blocks",
+      "description": "Блокировки пользователей",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
-        {"name": "question_id", "type": "UUID", "constraints": "NOT NULL REFERENCES icebreaker_questions(id)"},
-        {"name": "sender_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "recipient_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "match_id", "type": "UUID", "constraints": "NOT NULL REFERENCES matches(id)"},
-        {"name": "message_id", "type": "UUID", "constraints": "REFERENCES messages(id)"},
-        {"name": "was_responded", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
-        {"name": "response_time_sec", "type": "INTEGER", "constraints": null},
-        {"name": "conversation_started", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "blocker_profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "blocked_profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "reason", "type": "block_reason_enum", "constraints": "DEFAULT 'manual'"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_icebreaker_usage_question", "idx_icebreaker_usage_sender", "idx_icebreaker_usage_match", "idx_icebreaker_usage_responded", "idx_icebreaker_usage_created"],
+      "indexes": ["idx_blocks_blocker", "idx_blocks_blocked"],
       "foreign_keys": [
-        {"column": "question_id", "references": "icebreaker_questions(id)"},
-        {"column": "sender_id", "references": "profiles(id)"},
-        {"column": "recipient_id", "references": "profiles(id)"},
-        {"column": "match_id", "references": "matches(id)"},
-        {"column": "message_id", "references": "messages(id)"}
+        {"column": "blocker_profile_id", "references": "profiles(id)"},
+        {"column": "blocked_profile_id", "references": "profiles(id)"}
       ]
     },
     {
       "name": "ratings_primary",
-      "description": "Первичный рейтинг на основе данных анкеты (completeness 30%, photo 30%, preference_match 20%, verification 20%)",
+      "description": "Первичный рейтинг на основе данных анкеты",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "profile_id", "type": "UUID", "constraints": "UNIQUE NOT NULL REFERENCES profiles(id)"},
         {"name": "completeness_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (completeness_score BETWEEN 0 AND 1)"},
         {"name": "photo_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (photo_score BETWEEN 0 AND 1)"},
+        {"name": "photo_count", "type": "SMALLINT", "constraints": "DEFAULT 0"},
         {"name": "preference_match_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (preference_match_score BETWEEN 0 AND 1)"},
         {"name": "verification_bonus", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (verification_bonus BETWEEN 0 AND 1)"},
-        {"name": "total_score", "type": "DECIMAL(5,4)", "constraints": "GENERATED ALWAYS AS (completeness_score * 0.3 + photo_score * 0.3 + preference_match_score * 0.2 + verification_bonus * 0.2) STORED"},
+        {"name": "total_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (total_score BETWEEN 0 AND 1)"},
+        {"name": "version", "type": "INTEGER", "constraints": "DEFAULT 1"},
         {"name": "calculated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_ratings_primary_profile", "idx_ratings_primary_total", "idx_ratings_primary_calculated"],
+      "indexes": ["idx_ratings_primary_profile", "idx_ratings_primary_score"],
       "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}]
     },
     {
       "name": "ratings_behavioral",
-      "description": "Поведенческий рейтинг на основе активности (like_count 25%, like_pass_ratio 25%, match_rate 20%, conversation_initiation 15%, activity_pattern 15%)",
+      "description": "Поведенческий рейтинг на основе активности",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
-        {"name": "profile_id", "type": "UUID", "constraints": "UNIQUE NOT NULL REFERENCES profiles(id)"},
+        {"name": "profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "like_received_count", "type": "INTEGER", "constraints": "DEFAULT 0"},
+        {"name": "pass_received_count", "type": "INTEGER", "constraints": "DEFAULT 0"},
         {"name": "like_count_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (like_count_score BETWEEN 0 AND 1)"},
         {"name": "like_pass_ratio_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (like_pass_ratio_score BETWEEN 0 AND 1)"},
         {"name": "match_rate_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (match_rate_score BETWEEN 0 AND 1)"},
         {"name": "conversation_initiation_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (conversation_initiation_score BETWEEN 0 AND 1)"},
+        {"name": "response_rate_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (response_rate_score BETWEEN 0 AND 1)"},
         {"name": "activity_pattern_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (activity_pattern_score BETWEEN 0 AND 1)"},
-        {"name": "total_score", "type": "DECIMAL(5,4)", "constraints": "GENERATED ALWAYS AS (like_count_score * 0.25 + like_pass_ratio_score * 0.25 + match_rate_score * 0.2 + conversation_initiation_score * 0.15 + activity_pattern_score * 0.15) STORED"},
+        {"name": "total_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (total_score BETWEEN 0 AND 1)"},
         {"name": "period_start", "type": "DATE", "constraints": "NOT NULL"},
         {"name": "period_end", "type": "DATE", "constraints": "NOT NULL"},
         {"name": "calculated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_ratings_behavioral_profile", "idx_ratings_behavioral_total", "idx_ratings_behavioral_period", "idx_ratings_behavioral_calculated"],
+      "indexes": ["idx_ratings_beh_profile_period"],
       "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}]
     },
     {
       "name": "ratings_combined",
-      "description": "Комбинированный рейтинг: combined = (primary * 0.4) + (behavioral * 0.4) + (referral_bonus * 0.2)",
+      "description": "Комбинированный рейтинг — интеграция всех факторов",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "profile_id", "type": "UUID", "constraints": "UNIQUE NOT NULL REFERENCES profiles(id)"},
         {"name": "primary_score", "type": "DECIMAL(5,4)", "constraints": "NOT NULL CHECK (primary_score BETWEEN 0 AND 1)"},
+        {"name": "primary_weight", "type": "DECIMAL(3,2)", "constraints": "DEFAULT 0.40"},
         {"name": "behavioral_score", "type": "DECIMAL(5,4)", "constraints": "NOT NULL CHECK (behavioral_score BETWEEN 0 AND 1)"},
+        {"name": "behavioral_weight", "type": "DECIMAL(3,2)", "constraints": "DEFAULT 0.50"},
         {"name": "referral_bonus", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (referral_bonus BETWEEN 0 AND 1)"},
-        {"name": "total_score", "type": "DECIMAL(5,4)", "constraints": "GENERATED ALWAYS AS (primary_score * 0.4 + behavioral_score * 0.4 + referral_bonus * 0.2) STORED"},
+        {"name": "referral_weight", "type": "DECIMAL(3,2)", "constraints": "DEFAULT 0.10"},
+        {"name": "total_score", "type": "DECIMAL(5,4)", "constraints": "DEFAULT 0 CHECK (total_score BETWEEN 0 AND 1)"},
         {"name": "rank_position", "type": "INTEGER", "constraints": null},
         {"name": "percentile", "type": "DECIMAL(5,4)", "constraints": null},
+        {"name": "tier", "type": "VARCHAR(10)", "constraints": null},
         {"name": "calculated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_ratings_combined_profile", "idx_ratings_combined_total", "idx_ratings_combined_rank", "idx_ratings_combined_percentile", "idx_ratings_combined_calculated"],
+      "indexes": ["idx_ratings_combined_profile", "idx_ratings_combined_score", "idx_ratings_combined_tier"],
       "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}]
     },
     {
@@ -235,14 +344,16 @@
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "referrer_id", "type": "UUID", "constraints": "NOT NULL REFERENCES users(id)"},
         {"name": "referred_id", "type": "UUID", "constraints": "UNIQUE NOT NULL REFERENCES users(id)"},
-        {"name": "referral_code", "type": "VARCHAR(50)", "constraints": "UNIQUE"},
+        {"name": "referral_code", "type": "VARCHAR(50)", "constraints": "UNIQUE NOT NULL"},
         {"name": "bonus_earned", "type": "DECIMAL(10,2)", "constraints": "DEFAULT 0"},
         {"name": "referred_user_active", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
         {"name": "referred_user_premium", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "referred_profile_created", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "referred_first_match", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "activated_at", "type": "TIMESTAMPTZ", "constraints": null}
       ],
-      "indexes": ["idx_referrals_referrer", "idx_referrals_referred", "idx_referrals_code", "idx_referrals_active"],
+      "indexes": ["idx_referrals_referrer", "idx_referrals_code"],
       "foreign_keys": [
         {"column": "referrer_id", "references": "users(id)"},
         {"column": "referred_id", "references": "users(id)"}
@@ -256,15 +367,56 @@
         {"name": "user_id", "type": "UUID", "constraints": "NOT NULL REFERENCES users(id)"},
         {"name": "session_token", "type": "VARCHAR(255)", "constraints": "UNIQUE NOT NULL"},
         {"name": "redis_cache_key", "type": "VARCHAR(255)", "constraints": null},
-        {"name": "cached_profiles_count", "type": "INTEGER", "constraints": "DEFAULT 0"},
-        {"name": "current_profile_index", "type": "INTEGER", "constraints": "DEFAULT 0"},
+        {"name": "cached_profiles_count", "type": "SMALLINT", "constraints": "DEFAULT 0"},
+        {"name": "current_profile_index", "type": "SMALLINT", "constraints": "DEFAULT 0"},
         {"name": "last_profile_shown_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "device_info", "type": "JSONB", "constraints": null},
+        {"name": "ip_address", "type": "VARCHAR(45)", "constraints": null},
         {"name": "is_active", "type": "BOOLEAN", "constraints": "DEFAULT TRUE"},
         {"name": "expires_at", "type": "TIMESTAMPTZ", "constraints": "NOT NULL"},
+        {"name": "last_heartbeat_at", "type": "TIMESTAMPTZ", "constraints": null},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
         {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_sessions_user_id", "idx_sessions_token", "idx_sessions_expires", "idx_sessions_active"],
+      "indexes": ["idx_sessions_user", "idx_sessions_token", "idx_sessions_expires"],
+      "foreign_keys": [{"column": "user_id", "references": "users(id)"}]
+    },
+    {
+      "name": "daily_limits",
+      "description": "Rate limiting — дневные лимиты действий",
+      "columns": [
+        {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
+        {"name": "profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
+        {"name": "date", "type": "DATE", "constraints": "NOT NULL DEFAULT CURRENT_DATE"},
+        {"name": "swipes_count", "type": "SMALLINT", "constraints": "DEFAULT 0"},
+        {"name": "swipes_limit", "type": "SMALLINT", "constraints": "DEFAULT 50"},
+        {"name": "super_likes_count", "type": "SMALLINT", "constraints": "DEFAULT 0"},
+        {"name": "super_likes_limit", "type": "SMALLINT", "constraints": "DEFAULT 3"},
+        {"name": "messages_count", "type": "SMALLINT", "constraints": "DEFAULT 0"},
+        {"name": "messages_limit", "type": "SMALLINT", "constraints": "DEFAULT 200"},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
+      ],
+      "indexes": ["idx_daily_limits_profile_date"],
+      "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}]
+    },
+    {
+      "name": "notifications",
+      "description": "Уведомления пользователей",
+      "columns": [
+        {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
+        {"name": "user_id", "type": "UUID", "constraints": "NOT NULL REFERENCES users(id)"},
+        {"name": "type", "type": "VARCHAR(30)", "constraints": "NOT NULL"},
+        {"name": "title", "type": "VARCHAR(200)", "constraints": "NOT NULL"},
+        {"name": "body", "type": "TEXT", "constraints": null},
+        {"name": "data", "type": "JSONB", "constraints": "DEFAULT '{}'::jsonb"},
+        {"name": "is_sent", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "sent_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "is_read", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
+        {"name": "read_at", "type": "TIMESTAMPTZ", "constraints": null},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
+      ],
+      "indexes": ["idx_notif_user_unread", "idx_notif_unsent"],
       "foreign_keys": [{"column": "user_id", "references": "users(id)"}]
     },
     {
@@ -273,105 +425,99 @@
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
         {"name": "metric_name", "type": "VARCHAR(100)", "constraints": "NOT NULL"},
-        {"name": "metric_type", "type": "VARCHAR(20)", "constraints": "NOT NULL CHECK (metric_type IN ('counter', 'gauge', 'histogram'))"},
+        {"name": "metric_type", "type": "metric_type_enum", "constraints": "NOT NULL"},
         {"name": "metric_value", "type": "DECIMAL(20,6)", "constraints": "NOT NULL"},
         {"name": "dimensions", "type": "JSONB", "constraints": "DEFAULT '{}'::jsonb"},
         {"name": "period_start", "type": "TIMESTAMPTZ", "constraints": "NOT NULL"},
         {"name": "period_end", "type": "TIMESTAMPTZ", "constraints": "NOT NULL"},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_metrics_name", "idx_metrics_period", "idx_metrics_name_period", "idx_metrics_dimensions"],
+      "indexes": ["idx_metrics_name_period"],
       "foreign_keys": []
-    },
-    {
-      "name": "photos",
-      "description": "Метаданные фотографий профилей (опционально)",
-      "columns": [
-        {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
-        {"name": "profile_id", "type": "UUID", "constraints": "NOT NULL REFERENCES profiles(id)"},
-        {"name": "s3_key", "type": "VARCHAR(500)", "constraints": "NOT NULL"},
-        {"name": "s3_bucket", "type": "VARCHAR(100)", "constraints": "DEFAULT 'profile-photos'"},
-        {"name": "is_primary", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
-        {"name": "order", "type": "INTEGER", "constraints": "DEFAULT 0"},
-        {"name": "file_size_bytes", "type": "BIGINT", "constraints": null},
-        {"name": "mime_type", "type": "VARCHAR(50)", "constraints": "DEFAULT 'image/jpeg'"},
-        {"name": "width", "type": "INTEGER", "constraints": null},
-        {"name": "height", "type": "INTEGER", "constraints": null},
-        {"name": "is_moderated", "type": "BOOLEAN", "constraints": "DEFAULT FALSE"},
-        {"name": "moderation_status", "type": "VARCHAR(20)", "constraints": "DEFAULT 'pending'"},
-        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
-      ],
-      "indexes": ["idx_photos_profile_id", "idx_photos_primary", "idx_photos_order"],
-      "foreign_keys": [{"column": "profile_id", "references": "profiles(id)"}]
     },
     {
       "name": "date_ideas",
-      "description": "Идеи для свиданий (опционально)",
+      "description": "Идеи для свиданий",
       "columns": [
         {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
-        {"name": "category", "type": "VARCHAR(30)", "constraints": "NOT NULL CHECK (category IN ('cafe', 'activity', 'outdoor', 'cultural', 'entertainment'))"},
+        {"name": "category", "type": "date_category_enum", "constraints": "NOT NULL"},
         {"name": "title", "type": "VARCHAR(200)", "constraints": "NOT NULL"},
         {"name": "description", "type": "TEXT", "constraints": null},
-        {"name": "avg_cost", "type": "VARCHAR(20)", "constraints": "CHECK (avg_cost IN ('free', 'low', 'medium', 'high'))"},
+        {"name": "avg_cost", "type": "cost_level_enum", "constraints": null},
         {"name": "suitable_interests", "type": "JSONB", "constraints": "DEFAULT '[]'::jsonb"},
         {"name": "city", "type": "VARCHAR(100)", "constraints": null},
+        {"name": "country_code", "type": "CHAR(2)", "constraints": null},
         {"name": "latitude", "type": "DECIMAL(9,6)", "constraints": null},
         {"name": "longitude", "type": "DECIMAL(9,6)", "constraints": null},
+        {"name": "suggested_count", "type": "INTEGER", "constraints": "DEFAULT 0"},
+        {"name": "positive_feedback_count", "type": "INTEGER", "constraints": "DEFAULT 0"},
         {"name": "is_active", "type": "BOOLEAN", "constraints": "DEFAULT TRUE"},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
+      ],
+      "indexes": ["idx_date_ideas_city"],
+      "foreign_keys": []
+    },
+    {
+      "name": "audit_log",
+      "description": "Лог аудита действий пользователей",
+      "columns": [
+        {"name": "id", "type": "UUID", "constraints": "PRIMARY KEY DEFAULT gen_random_uuid()"},
+        {"name": "user_id", "type": "UUID", "constraints": "REFERENCES users(id)"},
+        {"name": "action", "type": "VARCHAR(50)", "constraints": "NOT NULL"},
+        {"name": "entity_type", "type": "VARCHAR(50)", "constraints": "NOT NULL"},
+        {"name": "entity_id", "type": "UUID", "constraints": "NOT NULL"},
+        {"name": "old_values", "type": "JSONB", "constraints": null},
+        {"name": "new_values", "type": "JSONB", "constraints": null},
+        {"name": "ip_address", "type": "VARCHAR(45)", "constraints": null},
         {"name": "created_at", "type": "TIMESTAMPTZ", "constraints": "DEFAULT NOW()"}
       ],
-      "indexes": ["idx_date_ideas_category", "idx_date_ideas_city", "idx_date_ideas_interests"],
-      "foreign_keys": []
+      "indexes": ["idx_audit_user", "idx_audit_entity"],
+      "foreign_keys": [{"column": "user_id", "references": "users(id)"}]
     }
   ],
   "redis_structures": [
     {
       "key_pattern": "ranked_profiles:{user_id}:{session_id}",
       "type": "LIST",
-      "description": "Кэш 10 отранжированных анкет на сессию. Содержит profile_id, age, gender, city, interests, bio, photo_urls, combined_score, distance_km, match_probability",
+      "description": "Кэш 10 отранжированных анкет на сессию",
       "ttl": 3600
     },
     {
       "key_pattern": "session:{telegram_id}",
       "type": "HASH",
-      "description": "Данные сессии пользователя: user_id, profile_id, current_state, last_activity",
+      "description": "Данные сессии пользователя",
       "ttl": 3600
     },
     {
       "key_pattern": "ratelimit:{telegram_id}:{action}",
       "type": "COUNTER",
-      "description": "Rate limiting для действий: swipe, message, icebreaker. Сбрасывается каждые 60 секунд",
+      "description": "Rate limiting для действий",
       "ttl": 60
     },
     {
       "key_pattern": "celery:*",
       "type": "VARIOUS",
-      "description": "Задачи Celery: брокер и результаты выполнения",
+      "description": "Задачи Celery",
       "ttl": null
     },
     {
       "key_pattern": "swipe_lock:{swiper_id}:{swiped_id}",
       "type": "STRING",
-      "description": "Блокировка от дублирования свайпа. Значение: timestamp",
+      "description": "Блокировка от дублирования свайпа",
       "ttl": 30
     },
     {
       "key_pattern": "match_notification:{match_id}",
       "type": "STRING",
-      "description": "Флаг уведомления о мэтче для предотвращения дублирования",
+      "description": "Флаг уведомления о мэтче",
       "ttl": 300
     },
     {
       "key_pattern": "profile_viewed:{user_id}:{profile_id}",
       "type": "STRING",
-      "description": "Факт просмотра анкеты для исключения повторных показов в сессии",
+      "description": "Факт просмотра анкеты",
       "ttl": 86400
-    },
-    {
-      "key_pattern": "icebreaker_cooldown:{profile_id}",
-      "type": "STRING",
-      "description": "Кулдаун использования icebreaker для предотвращения спама",
-      "ttl": 300
     }
   ],
   "ranking_tables": {
@@ -381,8 +527,8 @@
       "factors": {
         "completeness_score": {"weight": 0.3, "description": "Полнота заполнения анкеты"},
         "photo_score": {"weight": 0.3, "description": "Количество и качество фотографий"},
-        "preference_match_score": {"weight": 0.2, "description": "Соответствие первичным предпочтениям"},
-        "verification_bonus": {"weight": 0.2, "description": "Бонус за верифицированный профиль"}
+        "preference_match_score": {"weight": 0.2, "description": "Соответствие предпочтениям"},
+        "verification_bonus": {"weight": 0.2, "description": "Бонус за верификацию"}
       },
       "formula": "completeness_score * 0.3 + photo_score * 0.3 + preference_match_score * 0.2 + verification_bonus * 0.2",
       "recalculation": "on_profile_update"
@@ -393,99 +539,24 @@
       "factors": {
         "like_count_score": {"weight": 0.25, "description": "Количество полученных лайков"},
         "like_pass_ratio_score": {"weight": 0.25, "description": "Соотношение лайков и пропусков"},
-        "match_rate_score": {"weight": 0.2, "description": "Частота взаимных лайков"},
-        "conversation_initiation_score": {"weight": 0.15, "description": "Частота инициирования диалогов"},
-        "activity_pattern_score": {"weight": 0.15, "description": "Временные параметры активности"}
+        "match_rate_score": {"weight": 0.2, "description": "Частота мэтчей"},
+        "conversation_initiation_score": {"weight": 0.15, "description": "Инициирование диалогов"},
+        "response_rate_score": {"weight": 0.10, "description": "Частота ответов"},
+        "activity_pattern_score": {"weight": 0.05, "description": "Паттерны активности"}
       },
-      "formula": "like_count_score * 0.25 + like_pass_ratio_score * 0.25 + match_rate_score * 0.2 + conversation_initiation_score * 0.15 + activity_pattern_score * 0.15",
+      "formula": "like_count_score * 0.25 + like_pass_ratio_score * 0.25 + match_rate_score * 0.2 + conversation_initiation_score * 0.15 + response_rate_score * 0.10 + activity_pattern_score * 0.05",
       "recalculation": "daily_via_celery"
     },
     "combined": {
       "table_name": "ratings_combined",
       "description": "Комбинированный рейтинг — интеграция всех факторов",
       "factors": {
-        "primary_score": {"weight": 0.4, "description": "Первичный рейтинг"},
-        "behavioral_score": {"weight": 0.4, "description": "Поведенческий рейтинг"},
-        "referral_bonus": {"weight": 0.2, "description": "Бонус за приглашение друзей"}
+        "primary_score": {"weight": 0.40, "description": "Первичный рейтинг"},
+        "behavioral_score": {"weight": 0.50, "description": "Поведенческий рейтинг"},
+        "referral_bonus": {"weight": 0.10, "description": "Бонус за приглашение друзей"}
       },
-      "formula": "primary_score * 0.4 + behavioral_score * 0.4 + referral_bonus * 0.2",
+      "formula": "primary_score * 0.40 + behavioral_score * 0.50 + referral_bonus * 0.10",
       "recalculation": "daily_via_celery"
     }
-  },
-  "optimization_indexes": [
-    "CREATE INDEX idx_users_telegram_id ON users(telegram_id);",
-    "CREATE INDEX idx_users_created_at ON users(created_at);",
-    "CREATE INDEX idx_profiles_user_id ON profiles(user_id);",
-    "CREATE INDEX idx_profiles_gender_looking_for ON profiles(gender, looking_for, is_active);",
-    "CREATE INDEX idx_profiles_location ON profiles(city, latitude, longitude);",
-    "CREATE INDEX idx_profiles_age_range ON profiles(age, is_active);",
-    "CREATE INDEX idx_profiles_interests ON profiles USING GIN (interests);",
-    "CREATE INDEX idx_preferences_profile_id ON preferences(profile_id);",
-    "CREATE INDEX idx_photos_profile_id ON photos(profile_id);",
-    "CREATE INDEX idx_photos_primary ON photos(profile_id, is_primary);",
-    "CREATE INDEX idx_photos_order ON photos(profile_id, \"order\");",
-    "CREATE INDEX idx_swipes_swiper_id ON swipes(swiper_id);",
-    "CREATE INDEX idx_swipes_swiped_id ON swipes(swiped_id);",
-    "CREATE INDEX idx_swipes_pair ON swipes(swiper_id, swiped_id, action);",
-    "CREATE INDEX idx_swipes_created_at ON swipes(created_at);",
-    "CREATE INDEX idx_swipes_action ON swipes(action, created_at);",
-    "CREATE UNIQUE INDEX uniq_swipes_pair ON swipes(swiper_id, swiped_id);",
-    "CREATE INDEX idx_matches_user1_id ON matches(user1_id);",
-    "CREATE INDEX idx_matches_user2_id ON matches(user2_id);",
-    "CREATE INDEX idx_matches_status ON matches(status);",
-    "CREATE INDEX idx_matches_users_combined ON matches(user1_id, user2_id, status);",
-    "CREATE INDEX idx_matches_last_message ON matches(last_message_at DESC);",
-    "CREATE UNIQUE INDEX uniq_matches_pair ON matches(user1_id, user2_id);",
-    "CREATE INDEX idx_messages_match_id ON messages(match_id);",
-    "CREATE INDEX idx_messages_match_created ON messages(match_id, created_at);",
-    "CREATE INDEX idx_messages_sender_id ON messages(sender_id);",
-    "CREATE INDEX idx_messages_is_read ON messages(is_read, created_at);",
-    "CREATE INDEX idx_messages_type ON messages(message_type, created_at);",
-    "CREATE INDEX idx_icebreaker_category ON icebreaker_questions(category, is_active);",
-    "CREATE INDEX idx_icebreaker_difficulty ON icebreaker_questions(difficulty, is_active);",
-    "CREATE INDEX idx_icebreaker_tags ON icebreaker_questions USING GIN (tags);",
-    "CREATE INDEX idx_icebreaker_success_rate ON icebreaker_questions(success_rate DESC, is_active);",
-    "CREATE INDEX idx_icebreaker_usage_count ON icebreaker_questions(usage_count ASC, is_active);",
-    "CREATE INDEX idx_icebreaker_usage_question ON icebreaker_usage(question_id);",
-    "CREATE INDEX idx_icebreaker_usage_sender ON icebreaker_usage(sender_id);",
-    "CREATE INDEX idx_icebreaker_usage_match ON icebreaker_usage(match_id);",
-    "CREATE INDEX idx_icebreaker_usage_responded ON icebreaker_usage(was_responded, created_at);",
-    "CREATE INDEX idx_icebreaker_usage_created ON icebreaker_usage(created_at);",
-    "CREATE INDEX idx_ratings_primary_profile ON ratings_primary(profile_id);",
-    "CREATE INDEX idx_ratings_primary_total ON ratings_primary(total_score DESC);",
-    "CREATE INDEX idx_ratings_primary_calculated ON ratings_primary(calculated_at);",
-    "CREATE INDEX idx_ratings_behavioral_profile ON ratings_behavioral(profile_id);",
-    "CREATE INDEX idx_ratings_behavioral_total ON ratings_behavioral(total_score DESC);",
-    "CREATE INDEX idx_ratings_behavioral_period ON ratings_behavioral(period_start, period_end);",
-    "CREATE INDEX idx_ratings_behavioral_calculated ON ratings_behavioral(calculated_at);",
-    "CREATE INDEX idx_ratings_combined_profile ON ratings_combined(profile_id);",
-    "CREATE INDEX idx_ratings_combined_total ON ratings_combined(total_score DESC);",
-    "CREATE INDEX idx_ratings_combined_rank ON ratings_combined(rank_position);",
-    "CREATE INDEX idx_ratings_combined_percentile ON ratings_combined(percentile DESC);",
-    "CREATE INDEX idx_ratings_combined_calculated ON ratings_combined(calculated_at);",
-    "CREATE INDEX idx_referrals_referrer ON referrals(referrer_id);",
-    "CREATE INDEX idx_referrals_referred ON referrals(referred_id);",
-    "CREATE INDEX idx_referrals_code ON referrals(referral_code);",
-    "CREATE INDEX idx_referrals_active ON referrals(referred_user_active, created_at);",
-    "CREATE INDEX idx_sessions_user_id ON sessions(user_id);",
-    "CREATE INDEX idx_sessions_token ON sessions(session_token);",
-    "CREATE INDEX idx_sessions_expires ON sessions(expires_at);",
-    "CREATE INDEX idx_sessions_active ON sessions(is_active, expires_at);",
-    "CREATE INDEX idx_metrics_name ON metrics(metric_name);",
-    "CREATE INDEX idx_metrics_period ON metrics(period_start, period_end);",
-    "CREATE INDEX idx_metrics_name_period ON metrics(metric_name, period_start);",
-    "CREATE INDEX idx_metrics_dimensions ON metrics USING GIN (dimensions);",
-    "CREATE INDEX idx_date_ideas_category ON date_ideas(category, is_active);",
-    "CREATE INDEX idx_date_ideas_city ON date_ideas(city, is_active);",
-    "CREATE INDEX idx_date_ideas_interests ON date_ideas USING GIN (suitable_interests);"
-  ],
-  "notes": {
-    "uuid_usage": "Все таблицы используют UUID для распределённой системы и безопасности",
-    "timestamp_with_timezone": "TIMESTAMPTZ для корректной работы с разными часовыми поясами",
-    "jsonb_with_gin": "JSONB с GIN индексами для гибких полей (интересы, предпочтения, метрики)",
-    "check_constraints": "CHECK constraints для валидации данных на уровне БД",
-    "generated_columns": "GENERATED ALWAYS AS для вычисляемых полей рейтингов",
-    "postgis_support": "PostGIS может быть добавлен для сложных гео-запросов",
-    "redis_caching_strategy": "Предварительная загрузка 10 анкет на сессию с TTL 3600 секунд"
   }
 }
