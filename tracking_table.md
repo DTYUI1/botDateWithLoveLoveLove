@@ -17,14 +17,21 @@
 
 ---
 
-## Этап 2: Разработка базовой функциональности ⬜
+## Этап 2: Разработка базовой функциональности ✅
 
 | № | Задача | Исполнитель | Статус | Дата | Артефакт |
 |---|--------|-------------|--------|------|----------|
-| 2.1 | Написание Telegram Bot | Telegram Bot Developer | ⬜ | — | bot/ |
-| 2.2 | Реализация регистрации (/start) | Telegram Bot Developer | ⬜ | — | handlers/start.py |
-| 2.3 | Создание анкеты (FSM) | Telegram Bot Developer | ⬜ | — | handlers/profile.py |
-| 2.4 | Backend API (CRUD профилей) | Backend Developer | ⬜ | — | api/v1/profile.py |
+| 2.1 | Написание Telegram Bot | Telegram Bot Developer | ✅ | 2026-04-03 | bot/main.py, bot/config.py, bot/api_client.py |
+| 2.2 | Реализация регистрации (/start) | Telegram Bot Developer | ✅ | 2026-04-03 | bot/handlers/start.py |
+| 2.3 | Создание анкеты (FSM) | Telegram Bot Developer | ✅ | 2026-04-03 | bot/handlers/profile.py, bot/states.py |
+| 2.4 | Backend API (CRUD профилей) | Backend Developer | ✅ | 2026-04-03 | backend/main.py, backend/api/v1/profile.py, backend/services/profile_service.py |
+| 2.5 | Модели БД (SQLAlchemy) | Backend Developer | ✅ | 2026-04-03 | backend/models/*.py |
+| 2.6 | Pydantic схемы | Backend Developer | ✅ | 2026-04-03 | backend/schemas/*.py |
+| 2.7 | Аутентификация по Telegram ID | Backend Developer | ✅ | 2026-04-03 | backend/api/v1/auth.py |
+| 2.8 | Matching API (свайпы, мэтчи) | Backend Developer | ✅ | 2026-04-03 | backend/api/v1/matching.py |
+| 2.9 | Inline-клавиатуры | Telegram Bot Developer | ✅ | 2026-04-03 | bot/keyboards/inline.py |
+| 2.10 | Middleware авторизации | Telegram Bot Developer | ✅ | 2026-04-03 | bot/middlewares/auth.py |
+| 2.11 | Dockerfile для сервисов | DevOps Engineer | ✅ | 2026-04-03 | bot/Dockerfile, backend/Dockerfile |
 
 ---
 
@@ -57,11 +64,26 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Всего задач | 21 |
-| Выполнено | 5 |
+| Всего задач | 32 |
+| Выполнено | 16 |
 | В работе | 0 |
 | Ожидает | 16 |
-| Прогресс | **23.8%** |
+| Прогресс | **50.0%** |
+
+---
+
+## 🎯 Критерии приёмки Этапа 2
+
+- [x] Telegram Bot запущен и обрабатывает команды
+- [x] Регистрация через /start работает (FSM)
+- [x] Создание анкеты с валидацией данных
+- [x] Редактирование профиля (имя, био, город, интересы)
+- [x] Backend API принимает запросы (FastAPI)
+- [x] CRUD операции с профилями работают
+- [x] Аутентификация по Telegram ID
+- [x] Свайпы (лайк/пропуск) записываются
+- [x] Мэтчи создаются при взаимных лайках
+- [x] Dockerfile для обоих сервисов
 
 ---
 

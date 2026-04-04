@@ -264,7 +264,6 @@ Table ratings_primary {
   verification_bonus decimal(5,4) [default: 0, check: `verification_bonus BETWEEN 0 AND 1`]
   total_score decimal(5,4) [default: 0, check: `total_score BETWEEN 0 AND 1`]
   version integer [default: 1]
-  calculated_at timestamptz [default: `now()`]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 }
@@ -283,7 +282,6 @@ Table ratings_behavioral {
   total_score decimal(5,4) [default: 0, check: `total_score BETWEEN 0 AND 1`]
   period_start date [not null]
   period_end date [not null]
-  calculated_at timestamptz [default: `now()`]
   created_at timestamptz [default: `now()`]
 }
 
@@ -300,7 +298,6 @@ Table ratings_combined {
   rank_position integer
   percentile decimal(5,4)
   tier varchar(10)
-  calculated_at timestamptz [default: `now()`]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 }
