@@ -1,0 +1,96 @@
+{
+  "rabbit_version": "3.12.0",
+  "exchanges": [
+    {
+      "name": "swipe_events",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "match_events",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "rating_updates",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "chat_messages",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "swipe_processing",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 60000,
+        "x-max-length": 10000
+      }
+    },
+    {
+      "name": "match_notifications",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "rating_calculation",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "message_delivery",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "swipe_events",
+      "destination": "swipe_processing",
+      "destination_type": "queue",
+      "routing_key": "swipe.*",
+      "arguments": {}
+    },
+    {
+      "source": "match_events",
+      "destination": "match_notifications",
+      "destination_type": "queue",
+      "routing_key": "match.created",
+      "arguments": {}
+    },
+    {
+      "source": "rating_updates",
+      "destination": "rating_calculation",
+      "destination_type": "queue",
+      "routing_key": "rating.*",
+      "arguments": {}
+    },
+    {
+      "source": "chat_messages",
+      "destination": "message_delivery",
+      "destination_type": "queue",
+      "routing_key": "message.sent",
+      "arguments": {}
+    }
+  ]
+}
