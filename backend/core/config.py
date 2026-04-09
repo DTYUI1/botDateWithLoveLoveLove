@@ -2,14 +2,29 @@
 Конфигурация Backend API.
 """
 
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from pathlib import Path
 
 
+def _resolve_env_file():
+    """Найти .env файл: сначала рядом с backend/, потом в cwd."""
+    # backend/core/config.py -> backend/ -> project root
+    backend_root = Path(__file__).parent.parent
+    candidates = [
+        backend_root / ".env",
+        Path.cwd() / ".env",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return None
+
+
 class BackendSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).parent.parent / ".env"),
+        env_file=_resolve_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,

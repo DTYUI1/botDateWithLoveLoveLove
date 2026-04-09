@@ -10,15 +10,15 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from loguru import logger
 
-from bot.keyboards.inline import (
+from keyboards.inline import (
     gender_keyboard,
     looking_for_keyboard,
     edit_profile_keyboard,
     profile_menu_keyboard,
     confirm_keyboard,
 )
-from bot.states import ProfileStates
-from bot.api_client import APIClient
+from states import ProfileStates
+from api_client import APIClient
 
 router = Router()
 

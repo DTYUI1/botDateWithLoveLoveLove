@@ -1,0 +1,58 @@
+# Backend .dockerignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info
+dist
+build
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+tests/
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Env (не нужен в образе — env vars из docker-compose)
+.env
+.env.local
+.env.production
+.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs
+*.md
+docs/
+
+# Infrastructure
+../infrastructure/
+
+# Bot
+../bot/

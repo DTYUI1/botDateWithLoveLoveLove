@@ -8,7 +8,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update
 from loguru import logger
 
-from bot.api_client import APIClient
+from api_client import APIClient
 
 
 class AuthMiddleware(BaseMiddleware):

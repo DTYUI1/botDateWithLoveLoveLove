@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, SmallInteger, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,7 +19,9 @@ class Photo(Base):
     __tablename__ = "photos"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    profile_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
+    profile_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=False, index=True
+    )
     s3_key: Mapped[str] = mapped_column(String(500), nullable=False)
     s3_bucket: Mapped[str] = mapped_column(String(100), default="profile-photos")
     thumbnail_s3_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

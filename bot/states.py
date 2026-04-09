@@ -30,6 +30,12 @@ class ProfileStates(StatesGroup):
 
 class SearchStates(StatesGroup):
     """Состояния для поиска анкет."""
-    
+
     viewing_profile = State()
     waiting_for_message = State()
+
+    # Редактирование настроек поиска
+    editing_age_range_min = State()
+    editing_age_range_max = State()
+    editing_distance = State()
+    editing_looking_for_settings = State()

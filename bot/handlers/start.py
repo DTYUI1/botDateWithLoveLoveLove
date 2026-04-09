@@ -7,9 +7,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from loguru import logger
 
-from bot.keyboards.inline import start_keyboard, profile_menu_keyboard
-from bot.states import ProfileStates
-from bot.api_client import APIClient
+from keyboards.inline import start_keyboard, profile_menu_keyboard
+from states import ProfileStates
+from api_client import APIClient
 
 router = Router()
 

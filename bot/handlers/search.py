@@ -7,9 +7,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from loguru import logger
 
-from bot.keyboards.inline import swipe_keyboard
-from bot.states import SearchStates
-from bot.api_client import APIClient
+from keyboards.inline import swipe_keyboard
+from states import SearchStates
+from api_client import APIClient
 
 router = Router()
 

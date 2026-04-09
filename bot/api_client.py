@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import httpx
 from loguru import logger
 
-from bot.config import settings
+from config import settings
 
 
 class APIClient:
@@ -153,8 +153,51 @@ class APIClient:
         """Получает список мэтчей."""
         client = await self.get_client()
         response = await client.get(
-            "/api/v1/matches",
+            "/api/v1/matching/matches",
             params={"telegram_id": telegram_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # ============================================
+    # Rating
+    # ============================================
+
+    async def get_rating(self, telegram_id: int) -> Optional[Dict[str, Any]]:
+        """Получает рейтинг пользователя."""
+        client = await self.get_client()
+        response = await client.get(
+            "/api/v1/rating/my",
+            params={"telegram_id": telegram_id},
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    # ============================================
+    # Settings
+    # ============================================
+
+    async def get_settings(self, telegram_id: int) -> Optional[Dict[str, Any]]:
+        """Получает настройки пользователя."""
+        client = await self.get_client()
+        response = await client.get(
+            "/api/v1/settings",
+            params={"telegram_id": telegram_id},
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    async def update_settings(self, telegram_id: int, settings_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Обновляет настройки пользователя."""
+        client = await self.get_client()
+        response = await client.put(
+            "/api/v1/settings",
+            params={"telegram_id": telegram_id},
+            json=settings_data,
         )
         response.raise_for_status()
         return response.json()

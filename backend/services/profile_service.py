@@ -365,7 +365,7 @@ class ProfileService:
             age=age,
             gender=profile.gender,
             bio=profile.bio,
-            interests=profile.interests or [],
+            interests=profile.interests if profile.interests else [],
             city=profile.city,
             looking_for=profile.looking_for,
             is_active=profile.is_active,

@@ -1,0 +1,74 @@
+# Project root .dockerignore (for backend build context = .)
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info
+dist
+build
+.venv
+venv
+backend/__pycache__
+backend/**/__pycache__
+bot/__pycache__
+bot/**/__pycache__
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+logs/
+backend/logs
+bot/logs
+*.log
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+tests/
+test/
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+backend/Dockerfile
+backend/.dockerignore
+bot/Dockerfile
+
+# Env (env vars передаются через docker-compose)
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs
+docs/
+*.md
+
+# Infrastructure — НУЖНА, копируется в backend Dockerfile явно
+# !infrastructure/
+
+# Monitoring
+monitoring/
+
+# Scripts
+scripts/
+
+# Backend/Bot venv
+backend/.venv
+bot/.venv

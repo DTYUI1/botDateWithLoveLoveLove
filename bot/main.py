@@ -13,15 +13,17 @@ from aiogram.enums import ParseMode
 from aiogram.client.session.aiohttp import AiohttpSession
 from loguru import logger
 
-from bot.config import settings
-from bot.api_client import APIClient
-from bot.middlewares.auth import AuthMiddleware
+from config import settings
+from api_client import APIClient
+from middlewares.auth import AuthMiddleware
 
 # Импорт роутеров
-from bot.handlers.start import router as start_router
-from bot.handlers.profile import router as profile_router
-from bot.handlers.search import router as search_router
-from bot.handlers.matches import router as matches_router
+from handlers.start import router as start_router
+from handlers.profile import router as profile_router
+from handlers.search import router as search_router
+from handlers.matches import router as matches_router
+from handlers.rating import router as rating_router
+from handlers.settings import router as settings_router
 
 
 def setup_logging():
@@ -107,6 +109,8 @@ async def main():
     dp.include_router(profile_router)
     dp.include_router(search_router)
     dp.include_router(matches_router)
+    dp.include_router(rating_router)
+    dp.include_router(settings_router)
 
     # Регистрируем хуки
     dp.startup.register(on_startup)

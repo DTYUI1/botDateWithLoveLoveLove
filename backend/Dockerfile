@@ -9,13 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Копирование requirements
-COPY requirements.txt .
+COPY backend/requirements.txt .
 
 # Установка зависимостей
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копирование кода
-COPY . .
+# Копирование кода backend
+COPY backend/ .
+
+# Копирование shared infrastructure (redis cache patterns)
+COPY infrastructure/ /app/infrastructure/
 
 # Создание директории для логов
 RUN mkdir -p logs

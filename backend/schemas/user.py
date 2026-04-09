@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class UserBase(BaseModel):
@@ -25,10 +25,9 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     """Схема ответа пользователя."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     is_banned: bool = False
     last_active_at: Optional[datetime] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True

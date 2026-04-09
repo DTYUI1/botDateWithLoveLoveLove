@@ -49,3 +49,8 @@ agents/
 
 # Проекты других проектов
 projects/*/artifacts/
+
+# Временные файлы
+docs/temp
+
+

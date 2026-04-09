@@ -44,14 +44,24 @@ class RedisClient:
             self.redis_url,
             decode_responses=True,
             max_connections=10,
+            socket_timeout=5,
+            socket_connect_timeout=5,
+            retry_on_timeout=True,
         )
-        # Проверить подключение
-        await self.redis.ping()
+        # Проверить подключение с таймаутом
+        try:
+            await self.redis.ping(timeout=3)
+        except Exception:
+            await self.disconnect()
+            raise
 
     async def disconnect(self):
         """Отключение от Redis."""
         if self.redis:
-            await self.redis.close()
+            try:
+                await self.redis.close()
+            except Exception:
+                pass  # Игнорируем ошибки при закрытии
 
     async def health_check(self) -> bool:
         """Проверка здоровья Redis."""
