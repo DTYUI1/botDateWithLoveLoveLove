@@ -21,7 +21,8 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Редактировать профиль", callback_data="edit_profile")],
-            [InlineKeyboardButton(text="📸 Добавить фото", callback_data="add_photo")],
+            [InlineKeyboardButton(text="📸 Добавить фото", callback_data="add_photo"),
+             InlineKeyboardButton(text="🖼 Мои фото", callback_data="list_photos")],
             [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")],
             [InlineKeyboardButton(text="🔍 Начать поиск", callback_data="start_search")],
         ]
@@ -107,6 +108,101 @@ def confirm_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="✅ Да", callback_data="confirm_yes"),
                 InlineKeyboardButton(text="❌ Нет", callback_data="confirm_no"),
             ],
+        ]
+    )
+    return keyboard
+
+
+def photos_list_keyboard(photos: list) -> InlineKeyboardMarkup:
+    """Клавиатура списка фотографий.
+
+    Args:
+        photos: Список фото с полями id, is_primary, s3_key
+    """
+    keyboard = []
+    for photo in photos:
+        photo_id = photo["id"]
+        is_primary = photo.get("is_primary", False)
+        primary_label = " ⭐" if is_primary else ""
+
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📸 Фото {photo_id[:8]}{primary_label}",
+                callback_data=f"photo_view:{photo_id}"
+            )
+        ])
+        if not is_primary:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="⭐ Сделать основным",
+                    callback_data=f"photo_primary:{photo_id}"
+                )
+            ])
+        keyboard.append([
+            InlineKeyboardButton(
+                text="🗑 Удалить",
+                callback_data=f"photo_delete:{photo_id}"
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад к профилю", callback_data="back_to_profile")
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def photo_action_keyboard(photo_id: str) -> InlineKeyboardMarkup:
+    """Клавиатура действий с конкретным фото."""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⭐ Сделать основным",
+                    callback_data=f"photo_primary:{photo_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Удалить",
+                    callback_data=f"photo_delete:{photo_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад к списку",
+                    callback_data="back_to_photos"
+                ),
+            ],
+        ]
+    )
+    return keyboard
+
+
+def confirm_delete_photo_keyboard(photo_id: str) -> InlineKeyboardMarkup:
+    """Клавиатура подтверждения удаления фото."""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑 Да, удалить",
+                    callback_data=f"photo_delete_confirm:{photo_id}"
+                ),
+                InlineKeyboardButton(
+                    text="⬅️ Отмена",
+                    callback_data=f"photo_view:{photo_id}"
+                ),
+            ],
+        ]
+    )
+    return keyboard
+
+
+def back_to_profile_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура возврата к профилю."""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад к профилю", callback_data="back_to_profile")],
         ]
     )
     return keyboard

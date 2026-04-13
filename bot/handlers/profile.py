@@ -241,6 +241,92 @@ async def process_edit_name(message: Message, state: FSMContext, api_client: API
     await state.clear()
 
 
+@router.callback_query(F.data == "edit_age")
+async def cb_edit_age(callback: CallbackQuery, state: FSMContext):
+    """Редактирование возраста."""
+    await callback.message.edit_text("🎂 Введи новый возраст (от 18 до 99):")
+    await state.set_state(ProfileStates.editing_age)
+    await callback.answer()
+
+
+@router.message(ProfileStates.editing_age)
+async def process_edit_age(message: Message, state: FSMContext, api_client: APIClient):
+    """Сохранение нового возраста."""
+    age_text = message.text.strip()
+
+    if not AGE_PATTERN.match(age_text):
+        await message.answer("❌ Возраст должен быть от 18 до 99 лет. Попробуй ещё раз:")
+        return
+
+    telegram_id = message.from_user.id
+    await api_client.update_profile(telegram_id, {"age": int(age_text)})
+
+    await message.answer("✅ Возраст обновлён!", reply_markup=profile_menu_keyboard())
+    await state.clear()
+
+
+@router.callback_query(F.data == "edit_gender")
+async def cb_edit_gender(callback: CallbackQuery, state: FSMContext):
+    """Редактирование пола."""
+    await callback.message.edit_text(
+        "⚧ Укажи свой пол:",
+        reply_markup=gender_keyboard(),
+    )
+    await state.set_state(ProfileStates.editing_gender)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("gender_"), ProfileStates.editing_gender)
+async def process_edit_gender(callback: CallbackQuery, state: FSMContext, api_client: APIClient):
+    """Сохранение нового пола."""
+    gender = callback.data.replace("gender_", "")
+    telegram_id = callback.from_user.id
+    await api_client.update_profile(telegram_id, {"gender": gender})
+
+    gender_map = {
+        "male": "👨 Мужской",
+        "female": "👩 Женский",
+        "other": "🌐 Другой",
+    }
+    await callback.message.edit_text(
+        f"✅ Пол обновлён: {gender_map.get(gender, gender)}",
+        reply_markup=profile_menu_keyboard(),
+    )
+    await state.clear()
+    await callback.answer()
+
+
+@router.callback_query(F.data == "edit_looking_for")
+async def cb_edit_looking_for(callback: CallbackQuery, state: FSMContext):
+    """Редактирование предпочтений поиска."""
+    await callback.message.edit_text(
+        "💕 Кого ты ищешь?",
+        reply_markup=looking_for_keyboard(),
+    )
+    await state.set_state(ProfileStates.editing_looking_for)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("looking_"), ProfileStates.editing_looking_for)
+async def process_edit_looking_for(callback: CallbackQuery, state: FSMContext, api_client: APIClient):
+    """Сохранение новых предпочтений поиска."""
+    looking_for = callback.data.replace("looking_", "")
+    telegram_id = callback.from_user.id
+    await api_client.update_profile(telegram_id, {"looking_for": looking_for})
+
+    looking_for_map = {
+        "male": "👨 Парней",
+        "female": "👩 Девушек",
+        "both": "💕 Всех",
+    }
+    await callback.message.edit_text(
+        f"✅ Теперь ты ищешь: {looking_for_map.get(looking_for, looking_for)}",
+        reply_markup=profile_menu_keyboard(),
+    )
+    await state.clear()
+    await callback.answer()
+
+
 @router.callback_query(F.data == "edit_bio")
 async def cb_edit_bio(callback: CallbackQuery, state: FSMContext):
     """Редактирование описания."""

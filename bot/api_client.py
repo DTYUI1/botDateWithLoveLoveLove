@@ -121,12 +121,25 @@ class APIClient:
     # Matching
     # ============================================
 
-    async def get_next_profile(self, telegram_id: int) -> Optional[Dict[str, Any]]:
-        """Получает следующую анкету для свайпа."""
+    async def get_next_profile(
+        self,
+        telegram_id: int,
+        session_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Получает следующую анкету для свайпа.
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            session_id: ID сессии кэша (опционально)
+        """
         client = await self.get_client()
+        params = {"telegram_id": telegram_id}
+        if session_id:
+            params["session_id"] = session_id
+        
         response = await client.get(
             "/api/v1/matching/next",
-            params={"telegram_id": telegram_id},
+            params=params,
         )
         if response.status_code == 404:
             return None
@@ -154,6 +167,92 @@ class APIClient:
         client = await self.get_client()
         response = await client.get(
             "/api/v1/matching/matches",
+            params={"telegram_id": telegram_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def refresh_session(
+        self,
+        telegram_id: int,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Обновляет сессию подбора анкет.
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            session_id: ID текущей сессии (опционально)
+            
+        Returns:
+            Dict с session_id, cached_count, profiles
+        """
+        client = await self.get_client()
+        params = {"telegram_id": telegram_id}
+        if session_id:
+            params["session_id"] = session_id
+        
+        response = await client.post(
+            "/api/v1/matching/session/refresh",
+            params=params,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # ============================================
+    # Photos
+    # ============================================
+
+    async def upload_photo(
+        self,
+        telegram_id: int,
+        file_path: str,
+    ) -> Dict[str, Any]:
+        """Загружает фотографию профиля (multipart/form-data).
+
+        Args:
+            telegram_id: Telegram ID пользователя
+            file_path: Путь к файлу на диске
+
+        Returns:
+            Dict с photo_id, s3_key, is_primary, message
+        """
+        client = await self.get_client()
+        with open(file_path, "rb") as f:
+            files = {"file": (file_path.split("/")[-1], f, "image/jpeg")}
+            response = await client.post(
+                "/api/v1/profile/photo",
+                files=files,
+                params={"telegram_id": telegram_id},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_photos(self, telegram_id: int) -> List[Dict[str, Any]]:
+        """Получает все фото профиля пользователя."""
+        client = await self.get_client()
+        response = await client.get(
+            "/api/v1/profile/photo",
+            params={"telegram_id": telegram_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def delete_photo(self, telegram_id: int, photo_id: str) -> Dict[str, Any]:
+        """Удаляет фотографию профиля."""
+        client = await self.get_client()
+        response = await client.delete(
+            f"/api/v1/profile/photo/{photo_id}",
+            params={"telegram_id": telegram_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def set_primary_photo(self, telegram_id: int, photo_id: str) -> Dict[str, Any]:
+        """Назначает фотографию основной."""
+        client = await self.get_client()
+        response = await client.post(
+            f"/api/v1/profile/photo/{photo_id}/set-primary",
             params={"telegram_id": telegram_id},
         )
         response.raise_for_status()

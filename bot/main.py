@@ -24,6 +24,8 @@ from handlers.search import router as search_router
 from handlers.matches import router as matches_router
 from handlers.rating import router as rating_router
 from handlers.settings import router as settings_router
+from handlers.photos import router as photos_router
+from handlers.common import router as common_router
 
 
 def setup_logging():
@@ -58,7 +60,9 @@ async def on_startup(bot: Bot, api_client: APIClient):
         {"command": "profile", "description": "Просмотр и редактирование своего профиля"},
         {"command": "search", "description": "Начать поиск анкет"},
         {"command": "matches", "description": "Просмотр списка мэтчей"},
-        {"command": "settings", "description": "Настройки предпочтений и уведомлений"},
+        {"command": "rating", "description": "Узнать свой рейтинг"},
+        {"command": "settings", "description": "Настройки предпочтений и уведомления"},
+        {"command": "cancel", "description": "Отменить текущий диалог"},
     ])
     logger.info("Команды бота установлены")
 
@@ -105,8 +109,10 @@ async def main():
     dp.update.middleware(AuthMiddleware(api_client))
 
     # Подключаем роутеры
+    dp.include_router(common_router)  # /cancel — должен быть первым
     dp.include_router(start_router)
     dp.include_router(profile_router)
+    dp.include_router(photos_router)
     dp.include_router(search_router)
     dp.include_router(matches_router)
     dp.include_router(rating_router)

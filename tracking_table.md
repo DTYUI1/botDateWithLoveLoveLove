@@ -35,16 +35,22 @@
 
 ---
 
-## Этап 3: Система анкет и ранжирования ⬜
+## Этап 3: Система анкет и ранжирования ✅
 
 | № | Задача | Исполнитель | Статус | Дата | Артефакт |
 |---|--------|-------------|--------|------|----------|
-| 3.1 | CRUD для анкет | Backend Developer | ⬜ | — | services/profile_service.py |
-| 3.2 | Алгоритм ранжирования (Уровень 1) | Backend Developer | ⬜ | — | services/rating_service.py |
-| 3.3 | Алгоритм ранжирования (Уровень 2) | Backend Developer | ⬜ | — | services/rating_service.py |
-| 3.4 | Алгоритм ранжирования (Уровень 3) | Backend Developer | ⬜ | — | services/rating_service.py |
-| 3.5 | Кэширование в Redis (10 анкет) | Queue/Cache Engineer | ⬜ | — | redis/session_cache.py |
-| 3.6 | Интеграция с ботом | Telegram Bot Developer | ⬜ | — | handlers/search.py |
+| 3.1 | CRUD для анкет | Backend Developer | ✅ | 2026-04-09 | backend/services/profile_service.py, backend/api/v1/profile.py |
+| 3.2 | Алгоритм ранжирования (Уровень 1) | Backend Developer | ✅ | 2026-04-09 | backend/services/rating_service.py (PrimaryRatingCalculator) |
+| 3.3 | Алгоритм ранжирования (Уровень 2) | Backend Developer | ✅ | 2026-04-09 | backend/services/rating_service.py (BehavioralRatingCalculator) |
+| 3.4 | Алгоритм ранжирования (Уровень 3) | Backend Developer | ✅ | 2026-04-09 | backend/services/rating_service.py (CombinedRatingCalculator) |
+| 3.5 | Кэширование в Redis (10 анкет) | Queue/Cache Engineer | ✅ | 2026-04-09 | backend/core/redis_client.py, backend/services/matching_service.py |
+| 3.6 | Интеграция с ботом | Telegram Bot Developer | ✅ | 2026-04-10 | bot/handlers/search.py (session_id, refresh) |
+| 3.7 | Backend API (17 endpoints) | Backend Developer | ✅ | 2026-04-09 | backend/api/v1/*.py (7 файлов, 17 endpoints → 200 OK) |
+| 3.8 | Загрузка фото (FSM + multipart) | Telegram Bot Developer | ✅ | 2026-04-10 | bot/handlers/photos.py, bot/api_client.py |
+| 3.9 | Управление фото (список, удалить, основное) | Telegram Bot Developer | ✅ | 2026-04-10 | bot/handlers/photos.py, bot/keyboards/inline.py |
+| 3.10 | Редактирование профиля (age, gender, looking_for) | Telegram Bot Developer | ✅ | 2026-04-10 | bot/handlers/profile.py |
+| 3.11 | Интеграция session_id для Redis кэша | Telegram Bot Developer | ✅ | 2026-04-10 | bot/api_client.py, bot/handlers/search.py |
+| 3.12 | Команда /cancel для FSM | Telegram Bot Developer | ✅ | 2026-04-10 | bot/handlers/common.py |
 
 ---
 
@@ -54,9 +60,12 @@
 |---|--------|-------------|--------|------|----------|
 | 4.1 | Настройка Celery (пересчёт рейтингов) | Backend Developer | ⬜ | — | celery_app.py |
 | 4.2 | Оптимизация БД (индексы) | Database Designer | ⬜ | — | database/indexes.sql |
-| 4.4 | Идеи для свиданий | Backend Developer | ⬜ | — | api/v1/date_ideas.py |
-| 4.5 | Тестирование | QA Engineer | ⬜ | — | tests/ |
-| 4.6 | Деплой на сервер | DevOps Engineer | ⬜ | — | docker-compose.prod.yml |
+| 4.3 | MinIO интеграция (upload фото в S3) | Backend Developer | ⬜ | — | backend/services/photo_service.py + minio_client.py |
+| 4.4 | RabbitMQ publisher (события свайпов/мэтчей) | Queue/Cache Engineer | ⬜ | — | infrastructure/rabbitmq/event_publisher.py |
+| 4.5 | Messages API (чат между мэтчами) | Backend Developer | ⬜ | — | backend/api/v1/messages.py |
+| 4.6 | Идеи для свиданий | Backend Developer | ⬜ | — | api/v1/date_ideas.py |
+| 4.7 | Тестирование | QA Engineer | ⬜ | — | tests/ |
+| 4.8 | Деплой на сервер | DevOps Engineer | ⬜ | — | docker-compose.prod.yml |
 
 ---
 
@@ -64,11 +73,32 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Всего задач | 32 |
-| Выполнено | 16 |
+| Всего задач | 36 |
+| Выполнено | 28 |
 | В работе | 0 |
-| Ожидает | 16 |
-| Прогресс | **50.0%** |
+| Ожидает | 8 |
+| Прогресс | **77.8%** |
+
+---
+
+## 🎯 Критерии приёмки Этапа 3
+
+- [x] Backend API: 17/17 endpoints → 200 OK
+- [x] CRUD анкет работает (создание, чтение, обновление, удаление)
+- [x] Система рейтингов: Primary, Behavioral, Combined (3 уровня)
+- [x] Redis кэширование: 10 анкет на сессию с session_id
+- [x] Свайпы (лайк/пропуск) записываются в БД
+- [x] Мэтчи создаются при взаимных лайках
+- [x] Бот интегрирован с Backend API (APIClient, 14 методов)
+- [x] FSM диалоги: создание профиля, редактирование, поиск
+- [x] Загрузка фото через FSM (multipart upload на backend)
+- [x] Управление фото: просмотр списка, удаление, назначение основного
+- [x] Редактирование профиля: name, age, gender, bio, city, interests, looking_for
+- [x] Команда /cancel для прерывания FSM диалогов
+- [x] AuthMiddleware для авторизации через backend
+- [x] Интеграция session_id для корректного Redis кэша
+- [x] Автоматический refresh сессии при окончании анкет
+- [x] Бот запущен и работает (@HUScorp_bot)
 
 ---
 
@@ -81,8 +111,8 @@
 - [x] Backend API принимает запросы (FastAPI)
 - [x] CRUD операции с профилями работают
 - [x] Аутентификация по Telegram ID
-- [] Свайпы (лайк/пропуск) записываются
-- [] Мэтчи создаются при взаимных лайках
+- [x] Свайпы (лайк/пропуск) записываются
+- [x] Мэтчи создаются при взаимных лайках
 - [x] Dockerfile для обоих сервисов
 
 ---

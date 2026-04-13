@@ -1,17 +1,27 @@
 """
 Обработчики поиска анкет и свайпов.
+
+Интеграция с backend:
+- Сохранение session_id для использования Redis кэша
+- Автоматический refresh сессии при окончании анкет
+- Корректная обработка мэтчей
 """
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
 
 from keyboards.inline import swipe_keyboard
-from states import SearchStates
 from api_client import APIClient
 
 router = Router()
+
+
+class SearchStates(StatesGroup):
+    """Состояния для поиска анкет."""
+    viewing_profile = State()
 
 
 @router.message(F.text == "/search")
@@ -28,7 +38,7 @@ async def cmd_search(message: Message, state: FSMContext, api_client: APIClient)
         return
 
     await message.answer("🔍 Ищу подходящую анкету для тебя...")
-    await show_next_profile(message, state, api_client, telegram_id)
+    await show_next_profile(message, state, api_client, telegram_id, refresh_session=True)
 
 
 async def show_next_profile(
@@ -36,17 +46,71 @@ async def show_next_profile(
     state: FSMContext,
     api_client: APIClient,
     telegram_id: int,
+    refresh_session: bool = False,
 ):
-    """Показывает следующую анкету."""
-    profile = await api_client.get_next_profile(telegram_id)
+    """Показывает следующую анкету.
+    
+    Args:
+        message: Сообщение для отправки
+        state: FSM контекст
+        api_client: HTTP клиент
+        telegram_id: Telegram ID пользователя
+        refresh_session: Если True, обновить сессию при отсутствии анкет
+    """
+    # Получаем session_id из состояния
+    data = await state.get_data()
+    session_id = data.get("session_id")
+
+    # Запрашиваем анкету
+    profile = await api_client.get_next_profile(telegram_id, session_id=session_id)
 
     if not profile:
-        await message.answer(
-            "😔 Пока нет подходящих анкет.\n\n"
-            "Попробуй позже или измени настройки поиска.\n"
-            "Используй /settings для изменения предпочтений."
-        )
-        return
+        # Анкеты закончились — пробуем refresh
+        if refresh_session:
+            await message.answer("😔 Анкеты закончились. Обновляю подборку...")
+            try:
+                refresh_result = await api_client.refresh_session(telegram_id, session_id)
+                new_session_id = refresh_result.get("session_id")
+                cached_count = refresh_result.get("cached_count", 0)
+
+                if cached_count > 0:
+                    # Сохраняем новый session_id
+                    await state.update_data(session_id=new_session_id)
+                    await message.answer(f"✅ Нашел ещё {cached_count} анкет!")
+                    # Пробуем снова
+                    await show_next_profile(message, state, api_client, telegram_id)
+                    return
+                else:
+                    await message.answer(
+                        "😔 Пока нет новых анкет.\n\n"
+                        "Попробуй позже или измени настройки поиска.\n"
+                        "Используй /settings для изменения предпочтений."
+                    )
+                    return
+            except Exception as e:
+                logger.error(f"[Search] Ошибка refresh сессии: {e}")
+                await message.answer(
+                    "😔 Пока нет подходящих анкет.\n\n"
+                    "Попробуй позже или измени настройки поиска."
+                )
+                return
+        else:
+            await message.answer(
+                "😔 Пока нет подходящих анкет.\n\n"
+                "Попробуй позже или измени настройки поиска.\n"
+                "Используй /settings для изменения предпочтений."
+            )
+            return
+
+    # Если это первая анкета из новой сессии — сохраняем session_id
+    if not session_id:
+        # Backend может вернуть session_id в ответе refresh, но get_next_profile его не возвращает
+        # Поэтому session_id остаётся None до первого refresh или явно создаётся backend
+        logger.debug(f"[Search] Анкета получена без session_id")
+
+    # Если в ответе есть session_id (например, после refresh) — сохраняем
+    if isinstance(profile, dict) and profile.get("session_id"):
+        await state.update_data(session_id=profile["session_id"])
 
     # Формируем текст анкеты
     interests = ", ".join(profile.get("interests", []))
@@ -59,7 +123,7 @@ async def show_next_profile(
     )
 
     await state.update_data(
-        current_profile_id=profile.get("id"),
+        current_profile_id=str(profile.get("id")),
         current_profile_data=profile,
     )
     await state.set_state(SearchStates.viewing_profile)
@@ -83,18 +147,22 @@ async def cb_swipe_like(callback: CallbackQuery, state: FSMContext, api_client: 
 
         if result.get("is_match"):
             # Произошёл мэтч!
+            match_name = result.get("match_profile_name", "пользователем")
             await callback.message.answer(
-                "🎉 У вас мэтч!\n\n"
-                f"Вы понравились друг другу с {result.get('match_profile_name', 'пользователем')}.\n"
+                "🎉 <b>У вас мэтч!</b>\n\n"
+                f"Вы понравились друг другу с {match_name}.\n"
                 "Теперь вы можете начать общение! 💬"
             )
         else:
-            await callback.message.answer("❤️ Лайк отправлен!")
+            await callback.answer("❤️")
+            # Показываем следующую анкету
             await show_next_profile(callback.message, state, api_client, telegram_id)
+            return  # Не отправляем дополнительное сообщение
 
     except Exception as e:
-        logger.error(f"Ошибка свайпа: {e}")
+        logger.error(f"[Search] Ошибка свайпа: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуй позже.", show_alert=True)
+        return
 
     await callback.answer()
 
@@ -112,11 +180,15 @@ async def cb_swipe_pass(callback: CallbackQuery, state: FSMContext, api_client: 
 
     try:
         await api_client.swipe(telegram_id, profile_id, "pass")
-        await callback.message.answer("❌ Пропущено!")
+        await callback.answer("❌")
+        # Показываем следующую анкету
         await show_next_profile(callback.message, state, api_client, telegram_id)
+        return  # Не отправляем дополнительное сообщение
+
     except Exception as e:
-        logger.error(f"Ошибка свайпа: {e}")
+        logger.error(f"[Search] Ошибка свайпа: {e}")
         await callback.answer("❌ Произошла ошибка. Попробуй позже.", show_alert=True)
+        return
 
     await callback.answer()
 
@@ -126,5 +198,5 @@ async def cb_start_search(callback: CallbackQuery, state: FSMContext, api_client
     """Начать поиск из меню профиля."""
     telegram_id = callback.from_user.id
     await callback.message.edit_text("🔍 Ищу подходящую анкету для тебя...")
-    await show_next_profile(callback.message, state, api_client, telegram_id)
+    await show_next_profile(callback.message, state, api_client, telegram_id, refresh_session=True)
     await callback.answer()
