@@ -1,0 +1,48 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: p2-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    container_name: p2-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  bench:
+    build: .
+    container_name: p2-bench
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_CONTAINER: p2-rabbitmq
+      REDIS_CONTAINER: p2-redis
+      BENCH_DURATION: "30"
+      BENCH_SIZES: "128,1024,10240,102400"
+      BENCH_RATES: "1000,5000,10000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./results:/app/results
