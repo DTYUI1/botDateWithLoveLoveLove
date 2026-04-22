@@ -15,7 +15,6 @@ from keyboards.inline import (
     looking_for_keyboard,
     edit_profile_keyboard,
     profile_menu_keyboard,
-    confirm_keyboard,
 )
 from states import ProfileStates
 from api_client import APIClient
@@ -24,6 +23,20 @@ router = Router()
 
 # Валидация возраста
 AGE_PATTERN = re.compile(r"^(1[89]|[2-9]\d)$")
+
+
+def render_profile_text(profile: dict) -> str:
+    """Собирает текст профиля для message/callback-сценариев."""
+    interests = ", ".join(profile.get("interests", []))
+    return (
+        f"👤 <b>{profile.get('display_name', 'Аноним')}</b>\n"
+        f"🎂 Возраст: {profile.get('age', 'не указан')}\n"
+        f"⚧ Пол: {profile.get('gender', 'не указан')}\n"
+        f"📍 Город: {profile.get('city', 'не указан')}\n"
+        f"💕 Ищу: {profile.get('looking_for', 'не указано')}\n\n"
+        f"📝 О себе: {profile.get('bio', 'не указано')}\n\n"
+        f"🎯 Интересы: {interests if interests else 'не указаны'}"
+    )
 
 
 # ============================================
@@ -190,22 +203,35 @@ async def cmd_profile(message: Message, state: FSMContext, api_client: APIClient
         )
         return
 
-    # Формируем текст профиля
-    interests = ", ".join(profile.get("interests", []))
-    profile_text = (
-        f"👤 <b>{profile.get('display_name', 'Аноним')}</b>\n"
-        f"🎂 Возраст: {profile.get('age', 'не указан')}\n"
-        f"⚧ Пол: {profile.get('gender', 'не указан')}\n"
-        f"📍 Город: {profile.get('city', 'не указан')}\n"
-        f"💕 Ищу: {profile.get('looking_for', 'не указано')}\n\n"
-        f"📝 О себе: {profile.get('bio', 'не указано')}\n\n"
-        f"🎯 Интересы: {interests if interests else 'не указаны'}"
-    )
-
     await message.answer(
-        profile_text,
+        render_profile_text(profile),
         reply_markup=profile_menu_keyboard(),
     )
+
+
+@router.callback_query(F.data == "back_to_profile")
+async def cb_back_to_profile(callback: CallbackQuery, api_client: APIClient):
+    """Вернуть пользователя к актуальному экрану профиля."""
+    await callback.answer()
+
+    telegram_id = callback.from_user.id
+    try:
+        profile = await api_client.get_profile(telegram_id)
+
+        if not profile:
+            await callback.message.edit_text(
+                "📝 У тебя ещё нет анкеты. Давай создадим её!\n"
+                "Нажми /start чтобы начать.",
+            )
+            return
+
+        await callback.message.edit_text(
+            render_profile_text(profile),
+            reply_markup=profile_menu_keyboard(),
+        )
+    except Exception as e:
+        logger.error(f"[Profile] Ошибка возврата к профилю: {e}")
+        await callback.message.answer("❌ Не удалось открыть профиль. Попробуй позже.")
 
 
 @router.callback_query(F.data == "edit_profile")

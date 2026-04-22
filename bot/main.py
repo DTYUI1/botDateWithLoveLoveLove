@@ -25,7 +25,7 @@ from handlers.matches import router as matches_router
 from handlers.rating import router as rating_router
 from handlers.settings import router as settings_router
 from handlers.photos import router as photos_router
-from handlers.common import router as common_router
+from handlers.common import router as common_router, fallback_router
 
 
 def setup_logging():
@@ -117,6 +117,7 @@ async def main():
     dp.include_router(matches_router)
     dp.include_router(rating_router)
     dp.include_router(settings_router)
+    dp.include_router(fallback_router)
 
     # Регистрируем хуки
     dp.startup.register(on_startup)

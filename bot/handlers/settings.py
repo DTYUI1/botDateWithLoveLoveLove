@@ -9,12 +9,33 @@ from loguru import logger
 
 from keyboards.inline import (
     looking_for_keyboard,
-    confirm_keyboard,
 )
 from states import SearchStates
 from api_client import APIClient
 
 router = Router()
+
+
+def render_settings_text(settings_data: dict) -> str:
+    """Собирает текст настроек поиска для message/callback-сценариев."""
+    looking_for_map = {
+        "male": "Парней",
+        "female": "Девушек",
+        "both": "Всех",
+    }
+
+    return (
+        "⚙️ <b>Твои настройки поиска:</b>\n\n"
+        f"🎂 Возраст: {settings_data.get('age_range_min', 18)}-{settings_data.get('age_range_max', 100)} лет\n"
+        f"📏 Расстояние: до {settings_data.get('distance_max_km', 100)} км\n"
+        f"💕 Ищу: {looking_for_map.get(settings_data.get('looking_for', 'both'), 'Всех')}\n"
+        f"📍 Город: {settings_data.get('city', 'не указан')}\n\n"
+        "Что хочешь изменить?\n\n"
+        "Используй команды:\n"
+        "/settings_age — изменить диапазон возраста\n"
+        "/settings_distance — изменить расстояние\n"
+        "/settings_looking — изменить кого ищешь\n"
+    )
 
 
 @router.message(F.text == "/settings")
@@ -39,30 +60,40 @@ async def cmd_settings(message: Message, api_client: APIClient):
             await message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
             return
 
-        looking_for_map = {
-            "male": "Парней",
-            "female": "Девушек",
-            "both": "Всех",
-        }
-
-        settings_text = (
-            "⚙️ <b>Твои настройки поиска:</b>\n\n"
-            f"🎂 Возраст: {settings_data.get('age_range_min', 18)}-{settings_data.get('age_range_max', 100)} лет\n"
-            f"📏 Расстояние: до {settings_data.get('distance_max_km', 100)} км\n"
-            f"💕 Ищу: {looking_for_map.get(settings_data.get('looking_for', 'both'), 'Всех')}\n"
-            f"📍 Город: {settings_data.get('city', 'не указан')}\n\n"
-            "Что хочешь изменить?\n\n"
-            "Используй команды:\n"
-            "/settings_age — изменить диапазон возраста\n"
-            "/settings_distance — изменить расстояние\n"
-            "/settings_looking — изменить кого ищешь\n"
-        )
-
-        await message.answer(settings_text)
+        await message.answer(render_settings_text(settings_data))
 
     except Exception as e:
         logger.error(f"[Bot Settings] Ошибка получения настроек: {e}")
         await message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
+
+
+@router.callback_query(F.data == "settings")
+async def cb_settings(callback: CallbackQuery, api_client: APIClient):
+    """Открыть настройки из inline-кнопки профиля."""
+    await callback.answer()
+
+    telegram_id = callback.from_user.id
+    logger.info(f"[Bot Settings] callback settings от user_id={telegram_id}")
+
+    profile = await api_client.get_profile(telegram_id)
+    if not profile:
+        await callback.message.answer(
+            "📝 Сначала создай анкету! Нажми /start чтобы начать."
+        )
+        return
+
+    try:
+        settings_data = await api_client.get_settings(telegram_id)
+
+        if not settings_data:
+            await callback.message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
+            return
+
+        await callback.message.answer(render_settings_text(settings_data))
+
+    except Exception as e:
+        logger.error(f"[Bot Settings] Ошибка получения настроек из callback: {e}")
+        await callback.message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
 
 
 @router.message(F.text == "/settings_age")

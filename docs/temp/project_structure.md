@@ -1,599 +1,444 @@
-# ConnectMe — Структура проекта
+# ConnectMe — Фактическая структура проекта
 
-> **Дата актуализации:** 10 апреля 2026 г.
-> **Версия:** 1.1.0
-> **Тип:** Dating-бот в Telegram с микросервисной архитектурой
-> **Ветка:** `stage1` (опережает origin/stage1 на 2 коммита)
+> Актуально на 22 апреля 2026
+> Ветка: `stage1`
+> Основано на реальном состоянии файлов и кода в репозитории, а не на плановых артефактах
 
----
+## Назначение проекта
 
-## 📋 Оглавление
+`ConnectMe` — Telegram dating-бот с отдельным ботом на `aiogram` и backend API на `FastAPI`.
+Сейчас проект фактически устроен как связка:
 
-1. [Общее описание](#общее-описание)
-2. [Корневая структура](#корневая-структура)
-3. [Backend (FastAPI)](#backend-fastapi)
-4. [Bot (aiogram 3.x)](#bot-aiogram-3x)
-5. [Инфраструктура](#инфраструктура)
-6. [Тесты](#тесты)
-7. [Скрипты](#скрипты)
-8. [Документация](#документация)
-9. [Промпты для разработки](#промты-для-разработки)
-10. [Технологический стек](#технологический-стек)
-11. [Архитектурные решения](#архитектурные-решения)
-12. [Текущий статус](#текущий-статус)
+1. Telegram Bot принимает команды и callback-и.
+2. Bot ходит в backend по HTTP через `bot/api_client.py`.
+3. Backend работает с PostgreSQL и опционально использует Redis.
+4. RabbitMQ и MinIO подготовлены инфраструктурно, но интегрированы частично.
 
----
+## Ключевые выводы по состоянию проекта
 
-## Общее описание
+- Бот и backend уже связаны и покрывают основной сценарий: регистрация, анкета, поиск, свайпы, мэтчи, рейтинг, настройки, фото.
+- Backend реализован как одно FastAPI-приложение, а не как набор отдельных микросервисов.
+- Фото сейчас валидируются и записываются в БД, но фактическая загрузка/удаление в MinIO помечены как `TODO`.
+- В `matching` есть заготовка под Redis-кэш сессий и fallback на прямой запрос к БД.
+- В UI бота есть несколько кнопок без обработчиков: `settings`, `back_to_profile`, `open_chat`, `date_ideas`.
+- В репозитории есть как минимум два набора тестов: `test/` и `tests/`.
 
-**ConnectMe** — это умный dating-бот для Telegram, который помогает пользователям 18-35 лет находить серьёзные отношения. Бот не только подбирает пары по интересам и рейтингу, но и предоставляет удобный интерфейс для общения.
+## Корень проекта
 
-### Ключевые возможности
-- Регистрация и создание детальных анкет
-- Поиск и свайп анкет (лайк/пропуск)
-- Система мэтчей при взаимных лайках
-- Чат с мэтчами (модель сообщений готова, API не реализовано)
-- Многоуровневая система рейтингов (Primary → Behavioral → Combined)
-- Кэширование анкет в Redis (10 анкет на сессию)
-- Настройки поиска (возраст, расстояние, ориентация)
-- Загрузка и управление фотографиями (до 6 фото, валидация формата/размера)
-
----
-
-## Корневая структура
-
-```
+```text
 connectme/
-├── .env.example              # Шаблон переменных окружения
-├── .gitignore                # Исключения для Git
-├── .dockerignore             # Исключения для Docker
-├── architecture.json         # Полная архитектурная спецификация
-├── database_schema.json      # Схема базы данных (PostgreSQL)
-├── dbdiagram.dbml            # DBML для визуализации схемы (dbdiagram.io)
-├── docker-compose.yml        # Полный Docker Compose (все сервисы)
-├── docker-compose.infra.yml  # Только инфраструктура (DB, Redis, RabbitMQ, MinIO)
-├── prd.json                  # Product Requirements Document
-├── README.md                 # Краткое руководство
-├── start-all.sh              # Скрипт локального запуска (backend + bot)
-├── tracking_table.md         # Трекинг задач по этапам
-│
-├── backend/                  # Backend API (FastAPI)
-├── bot/                      # Telegram Bot (aiogram 3.x)
-├── docs/                     # Документация проекта
-│   ├── info/                 # Справочная информация
-│   └── stages/               # Отчёты по этапам разработки
-├── infrastructure/           # Конфигурация инфраструктуры
-│   ├── postgres/             # PostgreSQL конфиг, init.sql, миграции
-│   ├── redis/                # Redis конфиг, паттерны кэширования
-│   ├── rabbitmq/             # RabbitMQ конфиг, определения очередей
-│   └── minio/                # MinIO скрипты и клиент
-├── logs/                     # Логи приложения (git-ignored)
-├── promts/                   # Промпты для AI-ассистентов
-├── scripts/                  # Скрипты автоматизации
-├── test/                     # Тесты (unit + infrastructure)
-└── tests/                    # Интеграционные тесты API
-```
-
----
-
-## Backend (FastAPI)
-
-**Путь:** `backend/`
-**Технологии:** FastAPI, SQLAlchemy 2.x, asyncpg, Pydantic v2
-**Порт:** 8005 (локально) / 8000 (в Docker)
-**Swagger:** http://localhost:8005/docs
-
-### Структура
-
-```
-backend/
-├── __init__.py
-├── main.py                   # Точка входа: FastAPI app, lifespan (DB + Redis init), 7 роутеров
-├── Dockerfile                # Python 3.11-slim, uvicorn port 8000
 ├── .dockerignore
-├── requirements.txt          # Все зависимости + celery, aio-pika, minio, prometheus-client
+├── .env
+├── .env.local
+├── .gitignore
+├── README.md
+├── architecture.json
+├── database_schema.json
+├── dbdiagram.dbml
+├── docker-compose.yml
+├── docker-compose.infra.yml
+├── prd.json
+├── start-all.sh
+├── tracking_table.md
+├── bot_nohup.log
 │
-├── api/                      # API роутеры
-│   ├── __init__.py
-│   └── v1/
-│       ├── __init__.py
-│       ├── auth.py           # POST /auth/telegram — аутентификация по Telegram ID
-│       ├── profile.py        # GET/POST/PUT /profile — CRUD профилей
-│       ├── matching.py       # GET/POST /matching/* — свайпы, подбор, сессии, мэтчи
-│       ├── rating.py         # GET /rating/my — комбинированный рейтинг
-│       ├── settings.py       # GET/PUT /settings — настройки поиска
-│       ├── photos.py         # CRUD /profile/photo — загрузка, удаление, primary
-│       └── health.py         # GET /health — проверка API + Redis + DB
-│
-├── core/                     # Базовая конфигурация
-│   ├── __init__.py
-│   ├── config.py             # BackendSettings (pydantic-settings, env vars)
-│   ├── database.py           # Async SQLAlchemy engine, session factory, init_db()
-│   └── redis_client.py       # RedisClient singleton (connect, disconnect, health, factories)
-│
-├── models/                   # SQLAlchemy модели (8 файлов)
-│   ├── __init__.py
-│   ├── user.py               # users — UUID, telegram_id (unique), username, is_banned, ...
-│   ├── profile.py            # profiles — user_id (FK, unique), gender, bio, interests (JSONB), ...
-│   ├── photo.py              # photos — profile_id (FK), s3_key, moderation_status, soft delete
-│   ├── swipe.py              # swipes — swiper_id, swiped_id, action (enum), source, context_data
-│   ├── match.py              # matches — profile1_id, profile2_id, status, last_message_preview
-│   ├── message.py            # messages — match_id, sender_id, content, media_urls (JSONB), is_read
-│   └── rating.py             # ratings_combined — profile_id, scores, tier, percentile, rank
-│
-├── schemas/                  # Pydantic v2 схемы (6 файлов)
-│   ├── __init__.py
-│   ├── user.py               # UserBase, UserCreate, UserResponse
-│   ├── profile.py            # ProfileBase, ProfileCreate, ProfileUpdate, ProfileResponse, ProfileShort
-│   ├── match.py              # SwipeRequest, SwipeResponse, MatchResponse
-│   ├── rating.py             # RatingResponse
-│   └── settings.py           # SettingsResponse, SettingsUpdate
-│
-└── services/                 # Бизнес-логика (5 файлов)
-    ├── __init__.py
-    ├── profile_service.py    # ProfileService — CRUD users/profiles, swipe, match, helpers
-    ├── matching_service.py   # MatchingService — подбор 10 анкет, фильтрация, Redis cache
-    ├── rating_service.py     # RatingService + 3 калькулятора (Primary, Behavioral, Combined)
-    └── photo_service.py      # PhotoService — валидация, CRUD фото, MinIO (TODO)
+├── backend/                # FastAPI backend
+├── bot/                    # Telegram bot на aiogram
+├── docs/                   # Документация
+├── infrastructure/         # Конфиги и утилиты инфраструктуры
+├── logs/                   # Логи локального запуска
+├── practice/               # Вспомогательная локальная директория
+├── promts/                 # Промпты для разработчиков/ассистентов
+├── scripts/                # Скрипты автоматизации
+├── test/                   # Unit/infrastructure tests
+└── tests/                  # API/integration tests
 ```
 
-### Основные эндпоинты API (17 endpoints)
+## Backend
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| POST | `/api/v1/auth/telegram` | Аутентификация/создание пользователя по Telegram ID |
-| GET | `/api/v1/profile?telegram_id={id}` | Получить профиль (null если нет) |
-| POST | `/api/v1/profile?telegram_id={id}` | Создать профиль |
-| PUT | `/api/v1/profile?telegram_id={id}` | Обновить профиль |
-| POST | `/api/v1/profile/photo` | Загрузить фото (multipart/form-data, макс 6, JPEG/PNG/WebP/GIF, до 10МБ) |
-| GET | `/api/v1/profile/photo` | Получить все фото профиля |
-| DELETE | `/api/v1/profile/photo/{photo_id}` | Удалить фото (soft delete) |
-| POST | `/api/v1/profile/photo/{photo_id}/set-primary` | Назначить основное фото |
-| GET | `/api/v1/matching/next` | Следующая анкета для свайпа (Redis → MatchingService → ProfileService fallback) |
-| POST | `/api/v1/matching/swipe` | Лайк/пропуск/суперлайк с автопроверкой мэтча |
-| GET | `/api/v1/matching/matches` | Список мэтчей пользователя |
-| POST | `/api/v1/matching/session/refresh` | Обновить сессию подбора |
-| GET | `/api/v1/matching/session/status` | Статус сессии кэша |
-| GET | `/api/v1/rating/my` | Получить рейтинг (tier, percentile, scores) |
-| GET | `/api/v1/settings` | Получить настройки поиска |
-| PUT | `/api/v1/settings` | Обновить настройки (возраст, расстояние, ориентация) |
-| GET | `/api/v1/health` | Health check (API + Redis + DB) |
+Путь: `backend/`
 
----
+Точка входа: `backend/main.py`
 
-## Bot (aiogram 3.x)
+Назначение:
+- поднимает FastAPI-приложение;
+- инициализирует БД и Redis в `lifespan`;
+- подключает 7 API-роутеров;
+- пишет логи в `logs/backend_YYYY-MM-DD.log`.
 
-**Путь:** `bot/`
-**Технологии:** aiogram 3.x, aiohttp, httpx
-**Прокси:** `http://127.0.0.1:7897` (Koala Clash) / `http://host.docker.internal:7897` (Docker)
+### Структура backend
 
-### Структура
-
-```
-bot/
-├── __init__.py
-├── main.py                   # Точка входа: Bot, Dispatcher, AuthMiddleware, 6 handlers
-├── simple_bot.py             # Минимальный бот (для тестов, без backend)
-├── test_bot.py               # Тестовый бот
-├── api_client.py             # HTTP-клиент (httpx) для Backend API (10 методов)
-├── config.py                 # BotSettings (telegram_bot_token, backend_url, log_level)
-├── states.py                 # FSM состояния для диалогов
+```text
+backend/
+├── .dockerignore
+├── .env
 ├── Dockerfile
+├── main.py
+├── requirements.txt
+├── backend.log
+│
+├── api/
+│   └── v1/
+│       ├── auth.py
+│       ├── health.py
+│       ├── matching.py
+│       ├── photos.py
+│       ├── profile.py
+│       ├── rating.py
+│       └── settings.py
+│
+├── core/
+│   ├── config.py
+│   ├── database.py
+│   └── redis_client.py
+│
+├── models/
+│   ├── user.py
+│   ├── profile.py
+│   ├── photo.py
+│   ├── swipe.py
+│   ├── match.py
+│   ├── message.py
+│   └── rating.py
+│
+├── schemas/
+│   ├── user.py
+│   ├── profile.py
+│   ├── match.py
+│   ├── rating.py
+│   └── settings.py
+│
+└── services/
+    ├── profile_service.py
+    ├── matching_service.py
+    ├── photo_service.py
+    └── rating_service.py
+```
+
+### Реально подключённые backend-роуты
+
+Под префиксом `/api/v1`:
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| `POST` | `/auth/telegram` | Получить или создать пользователя по Telegram ID |
+| `GET` | `/profile` | Получить профиль |
+| `POST` | `/profile` | Создать профиль |
+| `PUT` | `/profile` | Обновить профиль |
+| `POST` | `/profile/photo` | Загрузить фото |
+| `GET` | `/profile/photo` | Список фото профиля |
+| `DELETE` | `/profile/photo/{photo_id}` | Удалить фото |
+| `POST` | `/profile/photo/{photo_id}/set-primary` | Сделать фото основным |
+| `GET` | `/matching/next` | Следующая анкета |
+| `POST` | `/matching/swipe` | Свайп по анкете |
+| `GET` | `/matching/matches` | Список мэтчей |
+| `POST` | `/matching/session/refresh` | Обновить сессию поиска |
+| `GET` | `/matching/session/status` | Статус кэш-сессии |
+| `GET` | `/rating/my` | Текущий рейтинг |
+| `GET` | `/settings` | Настройки поиска |
+| `PUT` | `/settings` | Обновить настройки поиска |
+| `GET` | `/health` | Health check |
+
+Дополнительно:
+- `GET /` возвращает информацию о сервисе и ссылку на `/docs`.
+
+### Что делает каждый сервис
+
+- `profile_service.py`
+  Работает с пользователями и профилями, обновляет анкету, записывает свайпы, формирует мэтчи.
+- `matching_service.py`
+  Подбирает анкеты, учитывает уже свайпнутые профили, применяет фильтры и может кэшировать сессию в Redis.
+- `photo_service.py`
+  Валидирует фото, создаёт записи о фото, переключает primary и делает soft delete.
+- `rating_service.py`
+  Содержит три уровня расчёта рейтинга: `Primary`, `Behavioral`, `Combined`.
+
+### Важные факты по backend
+
+- Backend использует `FastAPI`, `SQLAlchemy`, `asyncpg`, `pydantic-settings`, `redis`.
+- `docker-compose.yml` публикует backend наружу как `8005:8000`.
+- `backend/core/config.py` умеет искать `.env` сначала рядом с `backend/`, потом в корне проекта.
+- `health.py` реально проверяет API, Redis и БД.
+
+### Частично реализовано
+
+- В `backend/api/v1/photos.py` загрузка в MinIO и удаление из MinIO пока не выполнены.
+- В `backend/api/v1/matching.py` публикация событий в RabbitMQ и обновление Redis-счётчиков свайпов оставлены как `TODO`.
+- Модель `message.py` есть, но отдельного Messages API в backend нет.
+
+## Telegram Bot
+
+Путь: `bot/`
+
+Точка входа: `bot/main.py`
+
+Назначение:
+- поднимает `Bot` и `Dispatcher`;
+- регистрирует `AuthMiddleware`;
+- подключает роутеры;
+- общается с backend через `APIClient`.
+
+### Структура bot
+
+```text
+bot/
+├── Dockerfile
+├── api_client.py
+├── config.py
+├── main.py
+├── simple_bot.py
+├── states.py
+├── test_bot.py
 ├── requirements.txt
 │
-├── handlers/                 # Обработчики команд (6 файлов)
-│   ├── __init__.py
-│   ├── start.py              # /start — регистрация
-│   ├── profile.py            # /profile — создание/редактирование анкеты
-│   ├── search.py             # /search — поиск анкет
-│   ├── matches.py            # /matches — список мэтчей
-│   ├── rating.py             # /rating — мой рейтинг
-│   └── settings.py           # /settings — настройки поиска
+├── handlers/
+│   ├── common.py
+│   ├── matches.py
+│   ├── photos.py
+│   ├── profile.py
+│   ├── rating.py
+│   ├── search.py
+│   ├── settings.py
+│   └── start.py
 │
-├── middlewares/              # Middleware
-│   ├── __init__.py
-│   └── auth.py               # AuthMiddleware — авторизация через backend
+├── keyboards/
+│   └── inline.py
 │
-├── keyboards/                # Inline-клавиатуры
-│   ├── __init__.py
-│   └── inline.py             # Кнопки: ❤️ Лайк, ❌ Пропустить, и т.д.
+├── middlewares/
+│   └── auth.py
 │
-└── logs/                     # Логи бота (git-ignored)
+└── logs/
 ```
+
+### Что реально делает бот
+
+- `middlewares/auth.py`
+  На каждом обновлении вызывает backend-авторизацию `POST /api/v1/auth/telegram`.
+- `handlers/start.py`
+  Обрабатывает `/start`, проверяет наличие профиля и запускает создание анкеты через FSM.
+- `handlers/profile.py`
+  Ведёт сценарий создания профиля и редактирования полей анкеты.
+- `handlers/photos.py`
+  Загружает фото через Telegram, кладёт их во временный файл и отправляет в backend.
+- `handlers/search.py`
+  Запускает подбор анкет, хранит `session_id` в FSM, отправляет лайки/пропуски.
+- `handlers/matches.py`
+  Показывает список мэтчей.
+- `handlers/rating.py`
+  Показывает рейтинг и краткую интерпретацию tier.
+- `handlers/settings.py`
+  Отображает текущие настройки и позволяет менять возраст, дистанцию и `looking_for`.
+- `handlers/common.py`
+  Даёт команду `/cancel`.
 
 ### Команды бота
 
-| Команда | Описание |
-|---------|----------|
-| `/start` | Начать работу с ботом, регистрация |
-| `/profile` | Просмотр и редактирование своего профиля |
-| `/search` | Начать поиск анкет для лайков |
-| `/matches` | Просмотр списка мэтчей |
-| `/rating` | Узнать свой рейтинг |
-| `/settings` | Настройки предпочтений и поиска |
+Публичные команды, выставляемые через `set_my_commands`:
 
-### APIClient методы (bot/api_client.py)
+- `/start`
+- `/profile`
+- `/search`
+- `/matches`
+- `/rating`
+- `/settings`
+- `/cancel`
 
-| Метод | Backend Endpoint |
-|-------|-----------------|
-| `get_or_create_user()` | `POST /auth/telegram` |
-| `get_profile()` | `GET /profile` |
-| `create_profile()` | `POST /profile` |
-| `update_profile()` | `PUT /profile` |
-| `get_next_profile()` | `GET /matching/next` |
-| `swipe()` | `POST /matching/swipe` |
-| `get_matches()` | `GET /matching/matches` |
-| `get_rating()` | `GET /rating/my` |
-| `get_settings()` | `GET /settings` |
-| `update_settings()` | `PUT /settings` |
+Дополнительные текстовые команды, которые есть в обработчиках, но не добавляются в список команд Telegram:
 
----
+- `/settings_age`
+- `/settings_distance`
+- `/settings_looking`
+
+### FSM-состояния
+
+В `bot/states.py` есть две группы состояний:
+
+- `ProfileStates`
+  Создание и редактирование анкеты, плюс ожидание фото.
+- `SearchStates`
+  Просмотр анкет и изменение параметров поиска.
+
+### APIClient
+
+`bot/api_client.py` покрывает backend-методы для:
+
+- auth/user;
+- profile create/get/update;
+- matching next/swipe/matches/refresh;
+- photos upload/get/delete/set-primary;
+- rating;
+- settings;
+- health check.
+
+Особенность:
+- при создании `httpx.AsyncClient` временно очищаются proxy env vars, чтобы локальные запросы к backend не уходили через прокси.
+
+### Текущее состояние бота
+
+Работает:
+- авторизация через middleware;
+- создание и редактирование анкеты;
+- просмотр профиля;
+- загрузка и удаление фото через backend;
+- поиск анкет и свайпы;
+- просмотр мэтчей;
+- просмотр рейтинга;
+- изменение настроек поиска.
+
+Не доведено до конца:
+- кнопка `⚙️ Настройки` в `profile_menu_keyboard()` имеет `callback_data="settings"`, но обработчика для этого callback нет;
+- кнопка `⬅️ Назад к профилю` есть в клавиатурах, но обработчика `back_to_profile` нет;
+- кнопки `💬 Написать` (`open_chat`) и `🎁 Идеи для свиданий` (`date_ideas`) не обработаны;
+- `confirm_keyboard()` определена, но callback-обработчиков `confirm_yes` и `confirm_no` в проекте нет.
 
 ## Инфраструктура
 
-### Docker Compose сервисы
+Путь: `infrastructure/`
 
-#### 1. PostgreSQL (`db`)
-- **Образ:** `postgres:15-alpine`
-- **Порт:** 5432
-- **Конфиг:** `infrastructure/postgres/postgresql.conf` (shared_buffers=256MB, SSD оптимизация)
-- **Init:** `infrastructure/postgres/init.sql` (полная схема БД)
-- **Миграции:** `infrastructure/postgres/migrations/` (папка для Alembic)
-- **Таблицы:** users, profiles, photos, swipes, matches, messages, ratings_combined
-- **Enums:** gender_enum, looking_for_enum, swipe_action_enum, match_status_enum, moderation_status_enum
-
-#### 2. Redis (`redis`)
-- **Образ:** `redis:7-alpine`
-- **Порт:** 6379
-- **Конфиг:** `infrastructure/redis/redis.conf` (maxmemory=512MB, allkeys-lru, AOF)
-- **Назначение:**
-  - Кэширование анкет (`ranked_profiles:{user_id}:{session_id}`, List, TTL 3600s)
-  - Кэширование рейтингов (`ratings:{type}`, Sorted Set)
-  - Счётчики свайпов (`swipes:daily:{user_id}:{date}`, Hash)
-- **Паттерны:** `infrastructure/redis/cache_patterns.py` (ProfileSessionCache, RatingCache, SwipeCounterCache)
-
-#### 3. RabbitMQ (`rabbitmq`)
-- **Образ:** `rabbitmq:3-management-alpine`
-- **Порты:** 5672 (AMQP), 15672 (Management UI)
-- **Конфиг:** `infrastructure/rabbitmq/rabbitmq.conf` + `definitions.json`
-- **Exchanges:** swipe_events, match_events, rating_updates, chat_messages (topic)
-- **Queues:** swipe_processing, match_notifications, rating_calculation, message_delivery
-- **Publisher:** `infrastructure/rabbitmq/event_publisher.py`
-
-#### 4. MinIO (`minio`)
-- **Образ:** `minio/minio:latest`
-- **Порты:** 9000 (API), 9001 (Console)
-- **Bucket:** `profile-photos` (private)
-- **Скрипт:** `infrastructure/minio/setup.sh`
-- **Клиент:** `infrastructure/minio/minio_client.py` (upload, presigned URL, delete)
-
-### Конфигурация инфраструктуры
-
-```
+```text
 infrastructure/
-├── README.md                 # Полная документация инфраструктуры
-├── STAGE3_SETUP.md           # Отчёт о подготовке для Этапа 3
-├── VERIFICATION_REPORT.md    # Отчёт верификации
-│
+├── README.md
+├── STAGE3_SETUP.md
+├── VERIFICATION_REPORT.md
+├── minio/
+│   ├── minio_client.py
+│   └── setup.sh
 ├── postgres/
-│   ├── postgresql.conf       # Оптимизированный конфиг PostgreSQL
-│   ├── init.sql              # Полная схема БД + индексы + триггеры
-│   └── migrations/           # Папка для миграций Alembic
-│
-├── redis/
-│   ├── redis.conf            # Оптимизированный конфиг Redis
-│   └── cache_patterns.py     # Паттерны кэширования (3 класса)
-│
+│   ├── init.sql
+│   └── postgresql.conf
 ├── rabbitmq/
-│   ├── rabbitmq.conf         # Конфиг RabbitMQ
-│   ├── definitions.json      # Exchanges, queues, bindings
-│   └── event_publisher.py    # Python publisher событий
-│
-└── minio/
-    ├── setup.sh              # Скрипт создания bucket'ов
-    └── minio_client.py       # Python клиент для MinIO
+│   ├── definitions.json
+│   ├── event_publisher.py
+│   └── rabbitmq.conf
+└── redis/
+    ├── cache_patterns.py
+    └── redis.conf
 ```
 
----
+### Compose-конфигурации
+
+- `docker-compose.infra.yml`
+  Поднимает `PostgreSQL`, `Redis`, `RabbitMQ`, `MinIO`.
+- `docker-compose.yml`
+  Поднимает `bot`, `backend`, `db`, `redis`.
+
+Замечание:
+- в основном `docker-compose.yml` сервисы `RabbitMQ` и `MinIO` не стартуют, хотя backend держит конфиг под них.
+
+### Что уже интегрировано с кодом
+
+- PostgreSQL используется backend-ом.
+- Redis используется для health check, рейтингового кэша и matching session cache.
+- RabbitMQ пока подготовлен инфраструктурно, но из backend не вызывается.
+- MinIO подготовлен инфраструктурно, но upload/delete в API фото пока заглушены.
+
+## Документация
+
+Путь: `docs/`
+
+```text
+docs/
+├── info/
+│   ├── DB.png
+│   ├── architecture.md
+│   ├── database_schema.md
+│   ├── dbreview.md
+│   └── services.md
+├── stages/
+│   ├── stage1_report.md
+│   ├── stage2_report.md
+│   └── stage3_report.md
+└── temp/
+    ├── BACKEND_STATUS.md
+    ├── BOT_LAUNCH_GUIDE.md
+    ├── PROBLEMS_AND_SOLUTIONS.md
+    ├── SUMMARY_ALL_WORK.md
+    ├── SUMMARY_PHASE1.md
+    └── project_structure.md
+```
 
 ## Тесты
 
-### Unit-тесты (`test/`)
+В проекте два отдельных набора тестов.
 
-```
+### `test/`
+
+Назначение:
+- unit- и infrastructure-тесты.
+
+Содержимое:
+
+```text
 test/
-├── __init__.py
-├── pytest.ini
-├── requirements.txt
-├── README.md
-│
 ├── infrastructure/
-│   ├── __init__.py
-│   └── test_health_check.py        # 5 тестов (PostgreSQL, Redis, RabbitMQ, MinIO)
-│
-├── services/
-│   ├── __init__.py
-│   └── test_rating_service.py      # 24 теста (Primary: 7, Behavioral: 9, Combined: 8)
-│
+│   └── test_health_check.py
+├── rabbitmq/
+│   └── test_rabbitmq_publisher.py
 ├── redis/
-│   ├── __init__.py
-│   └── test_redis_cache.py         # 8 тестов (SessionCache: 3, RatingCache: 3, SwipeCounter: 2)
-│
-└── rabbitmq/
-    ├── __init__.py
-    └── test_rabbitmq_publisher.py  # 6 тестов (подключение + 4 типа событий)
+│   └── test_redis_cache.py
+├── services/
+│   └── test_rating_service.py
+├── README.md
+├── pytest.ini
+└── requirements.txt
 ```
 
-**Результат:** ✅ 24/24 unit tests passed (rating_service)
+### `tests/`
 
-### Интеграционные тесты API (`tests/`)
+Назначение:
+- интеграционные и API-тесты.
 
-```
+Содержимое:
+
+```text
 tests/
 ├── conftest.py
 ├── pytest.ini
 ├── requirements.txt
-├── test_api_endpoints.py           # 12 тестов (11/12, 1 интеграционный требует БД)
-└── test_stage3_integration.py      # 29 тестов (29/29, 100%)
+├── test_api_endpoints.py
+└── test_stage3_integration.py
 ```
 
-**Тестовое покрытие:**
-- PrimaryRatingCalculator: 6/6 ✅
-- BehavioralRatingCalculator: 9/9 ✅
-- CombinedRatingCalculator: 4/4 ✅
-- PhotoService: 5/5 ✅
-- MatchingService: 2/2 ✅
-- RedisCachePatterns: 3/3 ✅
-
----
+Замечание:
+- в обеих директориях есть `.pytest_cache`, но это служебные артефакты, не часть логической структуры проекта.
 
 ## Скрипты
 
-**Путь:** `scripts/`
+Путь: `scripts/`
 
-| Скрипт | Описание |
-|--------|----------|
-| `setup-infra.sh` | Полная установка инфраструктуры (Docker check → .env → запуск → health check → MinIO setup) |
-| `health-check.sh` | Проверка здоровья всех сервисов (контейнеры, PostgreSQL, Redis, RabbitMQ, MinIO, Backend API) |
-| `run-tests.sh` | Запуск всех тестов через pytest с установкой зависимостей |
-
----
-
-## Документация
-
-### `docs/info/` — Справочная информация
-
-### `docs/stages/` — Отчёты по этапам
-| Файл | Описание |
-|------|----------|
-| `stage1_report.md` | Отчёт по Этапу 1 (планирование) |
-| `stage2_report.md` | Отчёт по Этапу 2 (разработка) |
-
-### `docs/temp/` — Временные файлы
-| Файл | Описание |
-|------|----------|
-| `project_structure.md` | Данный файл — структура проекта |
-| `BACKEND_STATUS.md` | Статус готовности Backend API |
-
-### Корневые JSON-документы
-| Файл | Описание |
-|------|----------|
-| `architecture.json` | Полная архитектурная спецификация (сервисы, диаграммы, API, data flow, метрики) |
-| `database_schema.json` | Детальная схема БД (таблицы, колонки, индексы, FK, enum-ы) |
-| `prd.json` | Product Requirements Document (требования, user stories, критерии успеха) |
-
----
-
-## Промпты для разработки
-
-**Путь:** `promts/`
-
-| Файл | Описание |
-|------|----------|
-| `backend_developer.md` | Промпт для AI-ассистента: Backend Developer (FastAPI, SQLAlchemy, сервисы) |
-| `telegram_bot_developer.md` | Промпт для AI-ассистента: Telegram Bot Developer (aiogram, handlers, keyboards) |
-| `queue_cache_engineer.md` | Промпт для AI-ассистента: Queue/Cache Engineer (Redis, RabbitMQ, Celery) |
-
----
-
-## Технологический стек
-
-### Backend
-- **FastAPI** — асинхронный веб-фреймворк
-- **SQLAlchemy 2.x** — ORM (DeclarativeBase, async engine)
-- **asyncpg** — асинхронный драйвер PostgreSQL
-- **Pydantic v2** — валидация данных (ConfigDict, from_attributes)
-- **Uvicorn** — ASGI сервер
-- **Alembic** — миграции (в requirements, не используется)
-
-### Bot
-- **aiogram 3.x** — асинхронный фреймворк для Telegram Bot API
-- **aiohttp** — HTTP-клиент с поддержкой прокси (AiohttpSession)
-- **httpx** — HTTP-клиент для Backend API (trust_env=False)
-- **FSM** — машина состояний для диалогов
-
-### Инфраструктура
-- **PostgreSQL 15** — реляционная БД (PostGIS, JSONB, индексы, триггеры)
-- **Redis 7** — кэш, счётчики, сессии (maxmemory 512MB, allkeys-lru, AOF)
-- **RabbitMQ 3.12** — очередь сообщений (topic exchanges, definitions.json)
-- **MinIO** — S3-совместимое хранилище (bucket: profile-photos, private)
-- **Docker & Docker Compose** — контейнеризация
-
-### В requirements, но не реализовано
-- **Celery 5.x** — фоновые задачи (пересчёт рейтингов, очистка сессий)
-- **aio-pika** — асинхронный AMQP клиент для RabbitMQ
-- **prometheus-client** — метрики мониторинга
-- **minio** — официальный Python SDK для MinIO
-
----
-
-## Архитектурные решения
-
-### Монолитная архитектура Backend (фактическая)
-
-Несмотря на описание в `architecture.json` 5 отдельных микросервисов, фактически весь backend реализован как **единое FastAPI-приложение** на порту 8000 (Docker) / 8005 (локально):
-
-```
-┌─────────────┐
-│   Telegram   │
-│   Client     │
-└──────┬──────┘
-       │ commands, messages
-       ▼
-┌─────────────────────────┐
-│  Telegram Bot Service   │  ← aiogram 3.x + httpx APIClient
-│  (6 handlers, middleware)│
-└──────┬──────────────────┘
-       │ REST API (httpx)
-       ▼
-┌─────────────────────────┐
-│    Backend API          │  ← FastAPI (единое приложение)
-│  (7 роутеров, 17 endpoints)│
-├─────────────────────────┤
-│  Auth │ Profile │ Match│
-│  Rating │ Settings │   │
-│  Photos │ Health │     │
-└──────┬──────────────────┘
-       │
-       ├──────────────┬──────────────┬──────────────┐
-       ▼              ▼              ▼              ▼
-┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-│PostgreSQL│  │  Redis   │  │ RabbitMQ │  │  MinIO   │
-│  (7 табл)│  │ (кэш)    │  │(events)  │  │ (фото)   │
-└──────────┘  └──────────┘  └──────────┘  └──────────┘
+```text
+scripts/
+├── health-check.sh
+├── run-tests.sh
+└── setup-infra.sh
 ```
 
-### Система рейтингов
+Назначение:
+- `setup-infra.sh` поднимает и настраивает инфраструктуру;
+- `health-check.sh` проверяет сервисы;
+- `run-tests.sh` запускает тестовые сценарии.
 
-Многоуровневая система ранжирования пользователей:
+Дополнительно:
+- `start-all.sh` в корне запускает backend и bot локально.
 
-1. **Primary Rating** (on_profile_update)
-   - Полнота анкеты (10 факторов с весами)
-   - Качество фото (количество + главное фото)
-   - Бонус верификации (+5%)
-   - Формула: `completeness * 0.60 + photo_quality * 0.40 + verification_bonus`
+## Промпты
 
-2. **Behavioral Rating** (daily, через Celery — не реализовано)
-   - Полученные лайки (логарифмическая шкала)
-   - Соотношение лайков/пропусков
-   - Частота мэтчей
-   - Инициирование диалогов
-   - Паттерн активности (longevity + recency)
+Путь: `promts/`
 
-3. **Combined Rating** (daily)
-   - Формула: `primary * 0.40 + behavioral * 0.50 + referral_bonus * 0.10`
-   - Тиры: S (0.90+), A (0.75+), B (0.60+), C (0.45+), D (0.30+), E (<0.30)
-   - Перцентиль и позиция в рейтинге
-
-### Кэширование анкет
-
-- При начале сессии загружается 10 анкет в Redis
-- Ключ: `ranked_profiles:{user_id}:{session_id}`
-- Тип: List, TTL: 3600 секунд
-- Обновление: при завершении сессии или явном refresh
-- Ранжирование: по комбинированному рейтингу
-
-### Data Flow примеры
-
-1. **Регистрация:** Telegram → Bot → POST /auth/telegram → PostgreSQL (users) → Bot
-2. **Создание анкеты:** Telegram → Bot (FSM) → POST /profile → PostgreSQL (profiles) → Bot
-3. **Подбор анкет:** Telegram → /search → Bot → GET /matching/next → Redis cache → PostgreSQL (miss) → MatchingService → Redis (cache 10) → Bot → Telegram
-4. **Лайк:** Telegram → Bot → POST /matching/swipe → PostgreSQL (swipes) → автопроверка мэтча → PostgreSQL (matches) → Bot → Telegram
-5. **Рейтинг:** Telegram → /rating → Bot → GET /rating/my → Redis cache → PostgreSQL → Bot → Telegram
-
----
-
-## Текущий статус
-
-### ✅ Реализовано и работает
-- **Infrastructure:** PostgreSQL, Redis, RabbitMQ, MinIO (Docker Compose, конфиги, health checks)
-- **Backend API:** FastAPI приложение, **17/17 endpoints → 200 OK**
-  - Auth, Profile CRUD, Photos CRUD, Matching (свайпы, мэтчи, сессии), Rating, Settings, Health
-- **Bot:** aiogram 3.x, AuthMiddleware, 6 handlers, APIClient (10 методов)
-- **Rating Service:** 3 уровня калькуляторов (Primary, Behavioral, Combined)
-- **Matching Service:** Подбор 10 анкет, фильтрация, Redis кэш
-- **Photo Service:** Валидация upload, CRUD фото (MinIO интеграция — TODO)
-- **Тесты:** 24/24 unit + 29/29 integration + 11/12 API
-- **Скрипты:** setup-infra.sh, health-check.sh, run-tests.sh
-
-### ⚠️ Частично реализовано
-- **MinIO интеграция:** Эндпоинты фото работают (валидация + БД), но загрузка в MinIO — заглушка
-- **RabbitMQ события:** Эндпоинты готовы, но публикация в exchanges — TODO
-- **Redis кэш matching:** MatchingService поддерживает кэш, fallback на ProfileService если Redis недоступен
-
-### 📝 Не реализовано (запланировано)
-| Функция | Описание | Приоритет |
-|---------|----------|-----------|
-| **MinIO upload** | Загрузка фото в S3, presigned URLs | 🔴 Высокий |
-| **RabbitMQ publisher** | Публикация swipe/match событий | 🟡 Средний |
-| **Celery worker** | Фоновый пересчёт behavioural рейтинга, очистка сессий | 🟡 Средний |
-| **Messages API** | GET/POST `/api/v1/messages/{match_id}` для real-time чата | 🟡 Средний |
-| **WebSocket чат** | Real-time сообщения между мэтчами | 🟢 Низкий |
-| **Rate limiting** | Ограничение свайпов/запросов | 🟢 Низкий |
-| **Alembic миграции** | Вместо create_all() | 🟢 Низкий |
-| **Prometheus метрики** | Мониторинг и визуализация | 🟢 Низкий |
-
-### 🔑 Известные проблемы и решения
-1. **Прокси для Telegram:** `AiohttpSession(proxy="http://127.0.0.1:7897")` / `http://host.docker.internal:7897`
-2. **HTTP_PROXY для httpx:** `trust_env=False` + `os.environ.pop()` в `api_client.py`
-3. **ForeignKey:** Добавлен `ForeignKey("profiles.id")` в `models/photo.py`
-4. **Pydantic v2:** `model_config = ConfigDict(from_attributes=True)` во всех схемах
-5. **ProfileResponse:** Переписан без наследования от ProfileBase для избежания конфликта валидации
-6. **Bot URL мэтчей:** Исправлен с `/api/v1/matches` на `/api/v1/matching/matches`
-
----
-
-## Быстрый старт
-
-### 1. Инфраструктура
-```bash
-./scripts/setup-infra.sh
+```text
+promts/
+├── backend_developer.md
+├── queue_cache_engineer.md
+└── telegram_bot_developer.md
 ```
 
-### 2. Проверка здоровья
-```bash
-./scripts/health-check.sh
-```
+## Что в документе было обновлено
 
-### 3. Backend
-```bash
-cd backend
-DATABASE_URL="postgresql+asyncpg://connectme_user:connectme_secure_pass@127.0.0.1:5432/connectme_db" \
-REDIS_URL="redis://127.0.0.1:6379/0" \
-RABBITMQ_URL="amqp://guest:guest@127.0.0.1:5672//" \
-../.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8005
-```
+По сравнению с предыдущей версией документа были исправлены ключевые расхождения:
 
-### 4. Bot (с прокси)
-```bash
-PYTHONPATH=. HTTP_PROXY="http://127.0.0.1:7897" HTTPS_PROXY="http://127.0.0.1:7897" \
-.venv/bin/python bot/main.py
-```
-
-### 5. Тесты
-```bash
-# Unit-тесты
-cd test && pytest -v
-
-# Интеграционные тесты
-cd tests && pytest -v
-
-# Все тесты
-./scripts/run-tests.sh
-```
-
-### Или всё сразу
-```bash
-./start-all.sh
-```
-
----
-
-## Git-статус
-
-- **Ветка:** `stage1`
-- **Опережает origin/stage1 на 2 коммита**
-- **Последний коммит:** `2c6158e` — «Бэкенд для 3 этапа. С готовыми 17 endpoints»
-- **Удалено:** `SUMMARY.md` (не в индексе)
-
----
+- убраны неподтверждённые утверждения вроде "всё работает", "17/17 endpoints → 200 OK", "ветка опережает origin на 2 коммита";
+- отражены реальные директории `docs/temp/`, `practice/`, `logs/`, `bot/logs/`;
+- уточнено, что в bot не 6, а 8 handler-модулей;
+- уточнено, что backend содержит 7 router-модулей и 17 API-endpoint-ов под `/api/v1`, плюс корневой `/`;
+- добавлены реальные незавершённые места в Telegram UI и интеграциях MinIO/RabbitMQ;
+- удалены ссылки на несуществующие каталоги и неподтверждённые результаты тестов.

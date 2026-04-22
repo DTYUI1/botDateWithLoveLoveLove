@@ -175,6 +175,7 @@ async def cb_list_photos(callback: CallbackQuery, api_client: APIClient):
                 "📸 У тебя пока нет фото.\n\n"
                 "Нажми «📸 Добавить фото» чтобы загрузить первую фотографию."
             )
+            await callback.answer()
             return
 
         photos_count = len(photos)
