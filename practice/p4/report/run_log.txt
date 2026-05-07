@@ -1,0 +1,32 @@
+Запуск: 2026-05-07T11:59:58
+
+== DIRTY READ ==
+Схема и тестовые данные сброшены.
+A: UPDATE accounts SET balance = 50, COMMIT еще не выполнен.
+B: SELECT balance -> 50
+A: ROLLBACK
+B: повторный SELECT balance -> 100
+Результат: B прочитала 50, хотя после ROLLBACK в таблице снова 100.
+
+== NON-REPEATABLE READ ==
+Схема и тестовые данные сброшены.
+A: первый SELECT price -> 100
+B: UPDATE price = 120; COMMIT
+A: второй SELECT price в той же транзакции -> 120
+Результат: одна и та же строка изменилась с 100 на 120.
+
+== PHANTOM READ ==
+Схема и тестовые данные сброшены.
+A: первый COUNT(status='NEW') -> 1
+B: INSERT нового заказа со status='NEW'; COMMIT
+A: второй COUNT(status='NEW') в той же транзакции -> 2
+Результат: появился фантомный заказ, счетчик изменился с 1 на 2.
+
+== LOST UPDATE ==
+Схема и тестовые данные сброшены.
+A: SELECT value -> 10; приложение вычисляет 10 + 1 = 11
+B: SELECT value -> 10; приложение вычисляет 10 + 1 = 11
+A: UPDATE counters SET value = 11; COMMIT
+B: UPDATE counters SET value = 11; COMMIT
+Итоговое значение -> 11
+Результат: ожидалось 12, но одно обновление потеряно, в таблице 11.
