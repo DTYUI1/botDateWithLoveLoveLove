@@ -54,18 +54,18 @@
 
 ---
 
-## Этап 4: Дополнительные функции ⬜
+## Этап 4: Дополнительные функции ✅
 
 | № | Задача | Исполнитель | Статус | Дата | Артефакт |
 |---|--------|-------------|--------|------|----------|
-| 4.1 | Настройка Celery (пересчёт рейтингов) | Backend Developer | ⬜ | — | celery_app.py |
-| 4.2 | Оптимизация БД (индексы) | Database Designer | ⬜ | — | database/indexes.sql |
-| 4.3 | MinIO интеграция (upload фото в S3) | Backend Developer | ⬜ | — | backend/services/photo_service.py + minio_client.py |
-| 4.4 | RabbitMQ publisher (события свайпов/мэтчей) | Queue/Cache Engineer | ⬜ | — | infrastructure/rabbitmq/event_publisher.py |
-| 4.5 | Messages API (чат между мэтчами) | Backend Developer | ⬜ | — | backend/api/v1/messages.py |
-| 4.6 | Идеи для свиданий | Backend Developer | ⬜ | — | api/v1/date_ideas.py |
-| 4.7 | Тестирование | QA Engineer | ⬜ | — | tests/ |
-| 4.8 | Деплой на сервер | DevOps Engineer | ⬜ | — | docker-compose.prod.yml |
+| 4.1 | Настройка Celery (пересчёт рейтингов) | Backend Developer | ✅ | 2026-05-03 | backend/celery_app.py |
+| 4.2 | Оптимизация БД (индексы) | Database Designer | ✅ | 2026-05-04 | database/indexes.sql |
+| 4.3 | MinIO интеграция (upload фото в S3) | Backend Developer | ✅ | 2026-05-03 | backend/services/photo_service.py + minio_client.py |
+| 4.4 | RabbitMQ publisher (события свайпов/мэтчей) | Queue/Cache Engineer | ✅ | 2026-05-04 | infrastructure/rabbitmq/event_publisher.py |
+| 4.5 | Messages API (чат между мэтчами) | Backend Developer | ✅ | 2026-05-03 | backend/api/v1/messages.py |
+| 4.6 | Идеи для свиданий | Backend Developer | ✅ | 2026-05-03 | backend/api/v1/date_ideas.py |
+| 4.7 | Тестирование | QA Engineer | ✅ | 2026-05-04 | tests/test_messages_api.py, tests/test_date_ideas_api.py, tests/test_photos_minio.py, tests/test_celery_tasks.py, tests/README.md, scripts/run-tests.sh |
+| 4.8 | Деплой на сервер | DevOps Engineer | ✅ | 2026-05-04 | docker-compose.prod.yml, infrastructure/nginx/nginx.conf, infrastructure/prometheus/prometheus.yml, infrastructure/grafana/provisioning/, scripts/deploy.sh, scripts/backup-db.sh, .env.example |
 
 ---
 
@@ -74,10 +74,26 @@
 | Метрика | Значение |
 |---------|----------|
 | Всего задач | 36 |
-| Выполнено | 28 |
+| Выполнено | 36 |
 | В работе | 0 |
-| Ожидает | 8 |
-| Прогресс | **77.8%** |
+| Ожидает | 0 |
+| Прогресс | **100%** |
+
+---
+
+## 🎯 Критерии приёмки Этапа 4
+
+- [x] Celery worker и beat настроены, задача `recalculate_all_ratings` зарегистрирована
+- [x] Индексы БД (`database/indexes.sql`)
+- [x] MinIO интеграция: реальная загрузка/удаление фото + presigned URL
+- [x] RabbitMQ publisher: события `swipe.*`, `match.created`, `rating.*`, `message.sent`
+- [x] Messages API + DateIdeas API
+- [x] Unit-тесты новых сервисов: messages, date_ideas, photos+MinIO, celery
+- [x] `scripts/run-tests.sh` запускает оба набора тестов
+- [x] `docker-compose.prod.yml` с nginx, Prometheus, Grafana, Celery worker/beat
+- [x] Prometheus scrape конфиг + Grafana provisioning (datasource + дашборд)
+- [x] `.env.example`, `scripts/deploy.sh`, `scripts/backup-db.sh`
+- [x] README обновлён разделом production deploy
 
 ---
 

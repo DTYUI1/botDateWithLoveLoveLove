@@ -14,12 +14,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
+from core.config import settings
 from core.database import get_db
 from core.redis_client import get_redis_client
 from schemas.match import SwipeRequest, SwipeResponse, MatchResponse
 from schemas.profile import ProfileShort
 from services.profile_service import ProfileService
 from services.matching_service import MatchingService
+from infrastructure.rabbitmq.event_publisher import EventPublisher
 
 router = APIRouter(prefix="/matching", tags=["matching"])
 
@@ -61,11 +63,10 @@ async def get_next_profile(
         
         profiles = result.get("profiles", [])
         if not profiles:
-            # Fallback на ProfileService
-            logger.warning(f"[Backend Matching] Кэш пуст, использую ProfileService")
-            profile_service = ProfileService(db)
-            profile = await profile_service.get_next_profile(telegram_id)
-            return profile
+            # Анкеты, прошедшие фильтры, действительно закончились — не подменяем
+            # их рандомом без looking_for/возрастного фильтра.
+            logger.info(f"[Backend Matching] Подходящих анкет нет (фильтры исчерпаны)")
+            return None
         
         # Возвращаем первую анкету из подобранных
         first_profile = profiles[0]
@@ -76,13 +77,13 @@ async def get_next_profile(
             city=first_profile.get("city"),
             bio=first_profile.get("bio"),
             interests=first_profile.get("interests", []),
+            primary_photo_url=first_profile.get("primary_photo_url"),
+            username=first_profile.get("username"),
         )
         
     except Exception as e:
         logger.error(f"[Backend Matching] ОШИБКА get_next_profile: {type(e).__name__}: {e}")
-        # Fallback
-        profile_service = ProfileService(db)
-        return await profile_service.get_next_profile(telegram_id)
+        return None
 
 
 @router.post("/swipe", response_model=SwipeResponse)
@@ -108,7 +109,12 @@ async def swipe_profile(
     )
     await db.commit()
 
-    # TODO: Опубликовать событие в RabbitMQ (swipe_events)
+    await _publish_swipe_events(
+        swiper_id=user_profile.id,
+        swiped_id=swipe_data.profile_id,
+        action=swipe_data.action,
+        result=result,
+    )
     # TODO: Обновить счётчик свайпов в Redis
     
     logger.info(f"[Backend Matching] Свайп записан, is_match={result['is_match']}")
@@ -178,3 +184,35 @@ async def get_session_status(
     except Exception as e:
         logger.error(f"[Backend Matching] ОШИБКА session_status: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Не удалось получить статус")
+
+
+async def _publish_swipe_events(
+    swiper_id,
+    swiped_id,
+    action: str,
+    result: dict,
+) -> None:
+    """Опубликовать swipe/match события без влияния на основной запрос."""
+    try:
+        async with EventPublisher(settings.rabbitmq_url) as publisher:
+            swipe_id = result.get("swipe_id")
+            await publisher.publish_swipe_event(
+                from_user_id=swiper_id,
+                to_user_id=swiped_id,
+                action=action,
+                swipe_id=swipe_id,
+            )
+
+            match_id = result.get("match_id")
+            if result.get("is_match") and match_id:
+                await publisher.publish_match_event(
+                    user1_id=swiper_id,
+                    user2_id=swiped_id,
+                    match_id=match_id,
+                    swipe_ids=[swipe_id] if swipe_id else [],
+                )
+    except Exception as e:
+        logger.warning(
+            "[Backend Matching] RabbitMQ publish skipped: "
+            f"{type(e).__name__}: {e}"
+        )

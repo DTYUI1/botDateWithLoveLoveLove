@@ -11,6 +11,7 @@
 import io
 from typing import BinaryIO, Optional
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from minio import Minio
 from minio.error import S3Error
@@ -45,6 +46,14 @@ class MinIOClient:
         bucket_name: str = "profile-photos",
         secure: bool = False
     ):
+        # urlparse("minio:9000") даёт scheme="minio", netloc="" — это не URL,
+        # а host:port. Считаем за URL только если есть явная http/https-схема.
+        if endpoint.startswith(("http://", "https://")):
+            parsed = urlparse(endpoint)
+            secure = parsed.scheme == "https"
+            endpoint = parsed.netloc
+
+        self.endpoint = endpoint
         self.client = Minio(
             endpoint,
             access_key=access_key,
@@ -52,6 +61,7 @@ class MinIOClient:
             secure=secure
         )
         self.bucket_name = bucket_name
+        self.secure = secure
         self._ensure_bucket_exists()
 
     def _ensure_bucket_exists(self):
@@ -119,9 +129,9 @@ class MinIOClient:
                 content_type=content_type
             )
 
-            # Сгенерировать URL
-            url = f"http://{self.client._base_url.netloc}/{self.bucket_name}/{object_name}"
-            return url
+            # Сгенерировать URL (object URL, для отладки/логов)
+            scheme = "https" if self.secure else "http"
+            return f"{scheme}://{self.endpoint}/{self.bucket_name}/{object_name}"
         except S3Error as e:
             raise Exception(f"Failed to upload photo: {e}")
 
@@ -161,6 +171,18 @@ class MinIOClient:
             self.client.remove_object(self.bucket_name, object_name)
         except S3Error as e:
             raise Exception(f"Failed to delete photo: {e}")
+
+    async def get_photo_bytes(self, object_name: str) -> bytes:
+        """Скачать байты объекта из MinIO."""
+        try:
+            response = self.client.get_object(self.bucket_name, object_name)
+            try:
+                return response.read()
+            finally:
+                response.close()
+                response.release_conn()
+        except S3Error as e:
+            raise Exception(f"Failed to fetch photo bytes: {e}")
 
     async def photo_exists(self, object_name: str) -> bool:
         """Проверить существует ли фото."""

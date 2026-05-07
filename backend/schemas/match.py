@@ -21,6 +21,7 @@ class SwipeResponse(BaseModel):
     """Ответ на свайп."""
     is_match: bool = False
     match_profile_name: Optional[str] = None
+    match_username: Optional[str] = None
     match_id: Optional[UUID] = None
 
 

@@ -1,0 +1,54 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "title": "ConnectMe Backend",
+  "uid": "connectme-backend",
+  "version": 1,
+  "schemaVersion": 39,
+  "tags": ["connectme"],
+  "timezone": "browser",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Backend up",
+      "id": 1,
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "up{job=\"connectme-backend\"}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests per second (RPS)",
+      "id": 2,
+      "gridPos": {"x": 4, "y": 0, "w": 10, "h": 8},
+      "targets": [{"expr": "sum by (handler) (rate(http_requests_total{job=\"connectme-backend\"}[1m]))", "legendFormat": "{{handler}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency",
+      "id": 3,
+      "gridPos": {"x": 14, "y": 0, "w": 10, "h": 8},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket{job=\"connectme-backend\"}[5m])))", "legendFormat": "p95 {{handler}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx error rate",
+      "id": 4,
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (handler) (rate(http_requests_total{job=\"connectme-backend\",status=~\"5..\"}[5m]))", "legendFormat": "5xx {{handler}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Inflight requests",
+      "id": 5,
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "http_requests_inprogress{job=\"connectme-backend\"}", "refId": "A"}]
+    }
+  ]
+}

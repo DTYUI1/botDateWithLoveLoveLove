@@ -534,40 +534,44 @@ class RatingService:
         from core.database import async_session_factory
 
         async with async_session_factory() as session:
-            # Найти или создать запись
-            result = await session.execute(
-                select(RatingCombinedModel).where(
-                    RatingCombinedModel.profile_id == profile_id
-                )
-            )
-            rating = result.scalar_one_or_none()
-
-            if rating:
-                # Обновить
-                rating.primary_score = combined_result["primary_score"]
-                rating.primary_weight = combined_result["primary_weight"]
-                rating.behavioral_score = combined_result["behavioral_score"]
-                rating.behavioral_weight = combined_result["behavioral_weight"]
-                rating.referral_bonus = combined_result["referral_bonus"]
-                rating.referral_weight = combined_result["referral_weight"]
-                rating.total_score = combined_result["total_score"]
-                rating.tier = combined_result["tier"]
-                rating.calculated_at = datetime.utcnow()
-            else:
-                # Создать
-                rating = RatingCombinedModel(
-                    profile_id=profile_id,
-                    primary_score=combined_result["primary_score"],
-                    primary_weight=combined_result["primary_weight"],
-                    behavioral_score=combined_result["behavioral_score"],
-                    behavioral_weight=combined_result["behavioral_weight"],
-                    referral_bonus=combined_result["referral_bonus"],
-                    referral_weight=combined_result["referral_weight"],
-                    total_score=combined_result["total_score"],
-                    tier=combined_result["tier"],
-                )
-                session.add(rating)
-
+            rating = await self.upsert_rating_in_session(profile_id, combined_result, session=session)
             await session.commit()
             await session.refresh(rating)
             return rating
+
+    async def upsert_rating_in_session(
+        self,
+        profile_id,
+        combined_result: Dict[str, Any],
+        session: Optional[AsyncSession] = None,
+    ) -> RatingCombinedModel:
+        """Создать или обновить комбинированный рейтинг в указанной сессии."""
+        session = session or self.db
+        result = await session.execute(
+            select(RatingCombinedModel).where(
+                RatingCombinedModel.profile_id == profile_id
+            )
+        )
+        rating = result.scalar_one_or_none()
+
+        values = {
+            "primary_score": combined_result["primary_score"],
+            "primary_weight": combined_result["primary_weight"],
+            "behavioral_score": combined_result["behavioral_score"],
+            "behavioral_weight": combined_result["behavioral_weight"],
+            "referral_bonus": combined_result["referral_bonus"],
+            "referral_weight": combined_result["referral_weight"],
+            "total_score": combined_result["total_score"],
+            "tier": combined_result["tier"],
+            "calculated_at": datetime.utcnow(),
+        }
+
+        if rating:
+            for field, value in values.items():
+                setattr(rating, field, value)
+        else:
+            rating = RatingCombinedModel(profile_id=profile_id, **values)
+            session.add(rating)
+
+        await session.flush()
+        return rating

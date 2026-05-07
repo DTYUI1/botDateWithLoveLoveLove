@@ -228,6 +228,23 @@ class APIClient:
             response.raise_for_status()
             return response.json()
 
+    async def fetch_photo_bytes(self, photo_url: str) -> Optional[bytes]:
+        """Скачать байты фото с backend по относительному пути /api/v1/profile/photo/{id}/raw.
+
+        Принимает абсолютный URL или относительный путь. Возвращает None при ошибке.
+        """
+        try:
+            client = await self.get_client()
+            url = photo_url if photo_url.startswith("http") else photo_url
+            response = await client.get(url, timeout=15.0)
+            if response.status_code != 200:
+                logger.warning(f"[APIClient] fetch_photo_bytes {url} status={response.status_code}")
+                return None
+            return response.content
+        except Exception as e:
+            logger.error(f"[APIClient] fetch_photo_bytes ОШИБКА: {type(e).__name__}: {e}")
+            return None
+
     async def get_photos(self, telegram_id: int) -> List[Dict[str, Any]]:
         """Получает все фото профиля пользователя."""
         client = await self.get_client()

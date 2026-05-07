@@ -8,13 +8,14 @@
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
 
-from keyboards.inline import swipe_keyboard
+from keyboards.inline import swipe_keyboard, match_chat_keyboard
 from api_client import APIClient
+from utils.formatters import format_profile_card
 
 router = Router()
 
@@ -113,20 +114,27 @@ async def show_next_profile(
         await state.update_data(session_id=profile["session_id"])
 
     # Формируем текст анкеты
-    interests = ", ".join(profile.get("interests", []))
-    profile_text = (
-        f"👤 <b>{profile.get('display_name', 'Аноним')}</b>\n"
-        f"🎂 Возраст: {profile.get('age', 'не указан')}\n"
-        f"📍 Город: {profile.get('city', 'не указан')}\n\n"
-        f"📝 {profile.get('bio', 'нет описания')}\n\n"
-        f"🎯 Интересы: {interests if interests else 'не указаны'}"
-    )
+    profile_text = format_profile_card(profile)
+    photo_url = profile.get("primary_photo_url")
 
     await state.update_data(
         current_profile_id=str(profile.get("id")),
         current_profile_data=profile,
     )
     await state.set_state(SearchStates.viewing_profile)
+
+    if photo_url:
+        photo_bytes = await api_client.fetch_photo_bytes(photo_url)
+        if photo_bytes:
+            try:
+                await message.answer_photo(
+                    photo=BufferedInputFile(photo_bytes, filename="photo.jpg"),
+                    caption=profile_text,
+                    reply_markup=swipe_keyboard(),
+                )
+                return
+            except Exception as e:
+                logger.warning(f"[Search] Не удалось отправить фото: {e}. Падаю на текст.")
 
     await message.answer(profile_text, reply_markup=swipe_keyboard())
 
@@ -147,11 +155,16 @@ async def cb_swipe_like(callback: CallbackQuery, state: FSMContext, api_client: 
 
         if result.get("is_match"):
             # Произошёл мэтч!
-            match_name = result.get("match_profile_name", "пользователем")
+            match_name = result.get("match_profile_name") or "пользователем"
+            match_username = result.get("match_username")
+            tail = (
+                "Нажми кнопку ниже, чтобы написать в Telegram."
+                if match_username
+                else "К сожалению, у партнёра не указан @username — написать напрямую не получится."
+            )
             await callback.message.answer(
-                "🎉 <b>У вас мэтч!</b>\n\n"
-                f"Вы понравились друг другу с {match_name}.\n"
-                "Теперь вы можете начать общение! 💬"
+                f"🎉 <b>У вас мэтч с {match_name}!</b>\n\n{tail}",
+                reply_markup=match_chat_keyboard(match_username),
             )
         else:
             await callback.answer("❤️")

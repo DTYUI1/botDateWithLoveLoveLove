@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Numeric, SmallInteger, func
+from sqlalchemy import DateTime, Numeric, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,7 +31,7 @@ class RatingCombined(Base):
     total_score: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
     rank_position: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
     percentile: Mapped[Optional[float]] = mapped_column(Numeric(5, 4), nullable=True)
-    tier: Mapped[Optional[str]] = mapped_column(SmallInteger, nullable=True)
+    tier: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

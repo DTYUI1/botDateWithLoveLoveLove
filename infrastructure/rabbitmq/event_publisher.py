@@ -9,8 +9,9 @@
 """
 
 import json
-from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any, Dict
+from uuid import uuid4
 
 import aio_pika
 from aio_pika import Message, DeliveryMode, ExchangeType
@@ -27,6 +28,36 @@ class EventPublisher:
     - chat_messages (topic)
     """
 
+    EXCHANGE_DEFINITIONS = {
+        "swipe": ("swipe_events", ExchangeType.TOPIC),
+        "match": ("match_events", ExchangeType.TOPIC),
+        "rating": ("rating_updates", ExchangeType.TOPIC),
+        "chat": ("chat_messages", ExchangeType.TOPIC),
+    }
+
+    QUEUE_DEFINITIONS = {
+        "swipe_processing": {
+            "durable": True,
+            "arguments": {
+                "x-message-ttl": 60000,
+                "x-max-length": 10000,
+            },
+        },
+        "match_notifications": {"durable": True, "arguments": {}},
+        "rating_calculation": {"durable": True, "arguments": {}},
+        "message_delivery": {"durable": True, "arguments": {}},
+    }
+
+    BINDINGS = (
+        ("swipe", "swipe_processing", "swipe.*"),
+        ("match", "match_notifications", "match.created"),
+        ("rating", "rating_calculation", "rating.*"),
+        ("chat", "message_delivery", "message.sent"),
+    )
+
+    VALID_SWIPE_ACTIONS = {"like", "pass", "super_like"}
+    VALID_RATING_TYPES = {"primary", "behavioral", "combined"}
+
     def __init__(self, rabbitmq_url: str):
         self.rabbitmq_url = rabbitmq_url
         self.connection = None
@@ -34,32 +65,40 @@ class EventPublisher:
         self.exchanges = {}
 
     async def connect(self):
-        """Подключение к RabbitMQ и получение exchanges."""
+        """Подключение к RabbitMQ и объявление topology."""
         self.connection = await aio_pika.connect_robust(self.rabbitmq_url)
         self.channel = await self.connection.channel()
+        await self.channel.set_qos(prefetch_count=100)
 
-        # Объявить exchanges
-        exchange_definitions = {
-            "swipe": ("swipe_events", ExchangeType.TOPIC),
-            "match": ("match_events", ExchangeType.TOPIC),
-            "rating": ("rating_updates", ExchangeType.TOPIC),
-            "chat": ("chat_messages", ExchangeType.TOPIC),
-        }
-
-        for name, (exchange_name, exchange_type) in exchange_definitions.items():
+        for name, (exchange_name, exchange_type) in self.EXCHANGE_DEFINITIONS.items():
             self.exchanges[name] = await self.channel.declare_exchange(
                 exchange_name,
                 exchange_type,
                 durable=True
             )
 
+        queues = {}
+        for queue_name, options in self.QUEUE_DEFINITIONS.items():
+            queues[queue_name] = await self.channel.declare_queue(
+                queue_name,
+                durable=options["durable"],
+                arguments=options["arguments"],
+            )
+
+        for exchange_key, queue_name, routing_key in self.BINDINGS:
+            await queues[queue_name].bind(
+                self.exchanges[exchange_key],
+                routing_key=routing_key,
+            )
+
     async def publish_swipe_event(
         self,
-        from_user_id: int,
-        to_user_id: int,
+        from_user_id: Any,
+        to_user_id: Any,
         action: str,
         session_id: str = None,
-        time_spent_ms: int = None
+        time_spent_ms: int = None,
+        swipe_id: Any = None,
     ):
         """
         Опубликовать событие свайпа.
@@ -70,14 +109,20 @@ class EventPublisher:
             action: like, pass, super_like
             session_id: ID сессии
             time_spent_ms: Время просмотра анкеты
+            swipe_id: ID записанного свайпа
         """
+        if action not in self.VALID_SWIPE_ACTIONS:
+            raise ValueError(f"Unsupported swipe action: {action}")
+
         event = {
-            "from_user_id": from_user_id,
-            "to_user_id": to_user_id,
+            "event_id": str(uuid4()),
+            "from_user_id": str(from_user_id),
+            "to_user_id": str(to_user_id),
             "action": action,
             "session_id": session_id,
             "time_spent_ms": time_spent_ms,
-            "timestamp": datetime.utcnow().isoformat()
+            "swipe_id": str(swipe_id) if swipe_id is not None else None,
+            "timestamp": self._utc_timestamp(),
         }
 
         routing_key = f"swipe.{action}"
@@ -85,9 +130,9 @@ class EventPublisher:
 
     async def publish_match_event(
         self,
-        user1_id: int,
-        user2_id: int,
-        match_id: int,
+        user1_id: Any,
+        user2_id: Any,
+        match_id: Any,
         swipe_ids: list = None
     ):
         """
@@ -100,18 +145,19 @@ class EventPublisher:
             swipe_ids: ID свайпов
         """
         event = {
-            "user1_id": user1_id,
-            "user2_id": user2_id,
-            "match_id": match_id,
-            "swipe_ids": swipe_ids or [],
-            "timestamp": datetime.utcnow().isoformat()
+            "event_id": str(uuid4()),
+            "user1_id": str(user1_id),
+            "user2_id": str(user2_id),
+            "match_id": str(match_id),
+            "swipe_ids": [str(swipe_id) for swipe_id in (swipe_ids or [])],
+            "timestamp": self._utc_timestamp(),
         }
 
         await self._publish("match", "match.created", event)
 
     async def publish_rating_update(
         self,
-        user_id: int,
+        user_id: Any,
         rating_type: str,
         new_score: float,
         old_score: float = None
@@ -125,12 +171,16 @@ class EventPublisher:
             new_score: Новый score
             old_score: Предыдущий score
         """
+        if rating_type not in self.VALID_RATING_TYPES:
+            raise ValueError(f"Unsupported rating type: {rating_type}")
+
         event = {
-            "user_id": user_id,
+            "event_id": str(uuid4()),
+            "user_id": str(user_id),
             "rating_type": rating_type,
             "new_score": new_score,
             "old_score": old_score,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": self._utc_timestamp(),
         }
 
         routing_key = f"rating.{rating_type}"
@@ -138,9 +188,9 @@ class EventPublisher:
 
     async def publish_message_sent(
         self,
-        match_id: int,
-        sender_id: int,
-        message_id: int,
+        match_id: Any,
+        sender_id: Any,
+        message_id: Any,
         content_preview: str = None
     ):
         """
@@ -153,11 +203,12 @@ class EventPublisher:
             content_preview: Превью содержимого
         """
         event = {
-            "match_id": match_id,
-            "sender_id": sender_id,
-            "message_id": message_id,
+            "event_id": str(uuid4()),
+            "match_id": str(match_id),
+            "sender_id": str(sender_id),
+            "message_id": str(message_id),
             "content_preview": content_preview,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": self._utc_timestamp(),
         }
 
         await self._publish("chat", "message.sent", event)
@@ -173,14 +224,18 @@ class EventPublisher:
             await self.connect()
 
         exchange = self.exchanges[exchange_name]
+        event_id = event_data.get("event_id")
         
         message = Message(
             body=json.dumps(event_data, default=str).encode(),
             delivery_mode=DeliveryMode.PERSISTENT,
             content_type="application/json",
+            message_id=event_id,
+            timestamp=datetime.now(timezone.utc),
             headers={
                 "source": "connectme-backend",
-                "event_type": routing_key
+                "event_type": routing_key,
+                "event_id": event_id,
             }
         )
         
@@ -190,6 +245,11 @@ class EventPublisher:
         """Закрытие соединения."""
         if self.connection and not self.connection.is_closed:
             await self.connection.close()
+
+    @staticmethod
+    def _utc_timestamp() -> str:
+        """ISO timestamp в UTC для event payload."""
+        return datetime.now(timezone.utc).isoformat()
 
     async def __aenter__(self):
         await self.connect()

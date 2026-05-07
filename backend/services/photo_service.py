@@ -19,6 +19,7 @@ from loguru import logger
 from models.profile import Profile
 from models.photo import Photo as PhotoModel
 from core.config import settings
+from infrastructure.minio.minio_client import MinIOClient
 
 
 class PhotoService:
@@ -89,11 +90,60 @@ class PhotoService:
         """
         Сгенерировать уникальное имя файла для S3.
         
-        Format: profile-photos/{profile_id}/{uuid}_{original_name}
+        Format: {profile_id}/{uuid}.{ext}
         """
         unique_id = uuid.uuid4().hex[:12]
         ext = filename.rsplit(".", 1)[-1] if "." in filename else "jpg"
-        return f"profile-photos/{profile_id}/{unique_id}.{ext}"
+        return f"{profile_id}/{unique_id}.{ext.lower()}"
+
+    def get_storage_client(self) -> MinIOClient:
+        """Создать клиент MinIO из backend settings."""
+        return MinIOClient(
+            endpoint=settings.minio_endpoint,
+            access_key=settings.minio_access_key,
+            secret_key=settings.minio_secret_key,
+            bucket_name=settings.minio_bucket,
+            secure=settings.minio_secure,
+        )
+
+    async def upload_to_storage(
+        self,
+        file_content: bytes,
+        s3_key: str,
+        content_type: str,
+    ) -> str:
+        """Загрузить файл в MinIO и вернуть object URL."""
+        client = self.get_storage_client()
+        return await client.upload_photo(
+            BytesIO(file_content),
+            s3_key,
+            content_type=content_type,
+        )
+
+    async def get_presigned_url(self, s3_key: str) -> Optional[str]:
+        """Получить временный URL для приватного фото."""
+        client = self.get_storage_client()
+        return await client.get_presigned_url(
+            s3_key,
+            expiry_seconds=settings.minio_presigned_expiry_seconds,
+        )
+
+    async def get_photo_bytes(self, s3_key: str) -> bytes:
+        """Скачать содержимое файла из MinIO.
+
+        Старые записи в БД могут содержать s3_key с префиксом имени бакета
+        (`profile-photos/<profile_id>/<file>`). MinIO ожидает object_name
+        ОТНОСИТЕЛЬНО bucket-а, поэтому такой префикс срезаем.
+        """
+        client = self.get_storage_client()
+        bucket_prefix = f"{client.bucket_name}/"
+        clean_key = s3_key[len(bucket_prefix):] if s3_key.startswith(bucket_prefix) else s3_key
+        return await client.get_photo_bytes(clean_key)
+
+    async def delete_from_storage(self, s3_key: str) -> None:
+        """Удалить объект из MinIO."""
+        client = self.get_storage_client()
+        await client.delete_photo(s3_key)
 
     async def create_photo_record(
         self,
@@ -113,6 +163,7 @@ class PhotoService:
         photo = PhotoModel(
             profile_id=profile_id,
             s3_key=s3_key,
+            s3_bucket=settings.minio_bucket,
             mime_type=content_type,
             file_size_bytes=file_size,
             is_primary=is_primary,

@@ -2,6 +2,8 @@
 Inline-клавиатуры для ConnectMe бота.
 """
 
+from typing import Optional
+
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
@@ -55,10 +57,34 @@ def swipe_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="❌ Пропустить", callback_data="swipe_pass"),
                 InlineKeyboardButton(text="❤️ Лайк", callback_data="swipe_like"),
             ],
-            [InlineKeyboardButton(text="💬 Написать", callback_data="open_chat")],
         ]
     )
     return keyboard
+
+
+def match_chat_keyboard(username: Optional[str]) -> InlineKeyboardMarkup:
+    """Клавиатура после состоявшегося мэтча.
+
+    Если у партнёра есть @username — даём URL-кнопку, открывающую личку.
+    Иначе — информационная кнопка-заглушка.
+    """
+    if username:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=f"💬 Написать @{username}",
+                    url=f"https://t.me/{username}",
+                )],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="ℹ️ У партнёра не указан @username",
+                callback_data="noop",
+            )],
+        ]
+    )
 
 
 def matches_keyboard() -> InlineKeyboardMarkup:

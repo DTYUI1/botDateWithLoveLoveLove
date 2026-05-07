@@ -18,6 +18,7 @@ from keyboards.inline import (
 )
 from states import ProfileStates
 from api_client import APIClient
+from utils.formatters import format_own_profile, GENDER_RU, LOOKING_FOR_RU
 
 router = Router()
 
@@ -27,16 +28,7 @@ AGE_PATTERN = re.compile(r"^(1[89]|[2-9]\d)$")
 
 def render_profile_text(profile: dict) -> str:
     """Собирает текст профиля для message/callback-сценариев."""
-    interests = ", ".join(profile.get("interests", []))
-    return (
-        f"👤 <b>{profile.get('display_name', 'Аноним')}</b>\n"
-        f"🎂 Возраст: {profile.get('age', 'не указан')}\n"
-        f"⚧ Пол: {profile.get('gender', 'не указан')}\n"
-        f"📍 Город: {profile.get('city', 'не указан')}\n"
-        f"💕 Ищу: {profile.get('looking_for', 'не указано')}\n\n"
-        f"📝 О себе: {profile.get('bio', 'не указано')}\n\n"
-        f"🎯 Интересы: {interests if interests else 'не указаны'}"
-    )
+    return format_own_profile(profile)
 
 
 # ============================================
@@ -309,13 +301,8 @@ async def process_edit_gender(callback: CallbackQuery, state: FSMContext, api_cl
     telegram_id = callback.from_user.id
     await api_client.update_profile(telegram_id, {"gender": gender})
 
-    gender_map = {
-        "male": "👨 Мужской",
-        "female": "👩 Женский",
-        "other": "🌐 Другой",
-    }
     await callback.message.edit_text(
-        f"✅ Пол обновлён: {gender_map.get(gender, gender)}",
+        f"✅ Пол обновлён: {GENDER_RU.get(gender, gender)}",
         reply_markup=profile_menu_keyboard(),
     )
     await state.clear()
@@ -340,13 +327,8 @@ async def process_edit_looking_for(callback: CallbackQuery, state: FSMContext, a
     telegram_id = callback.from_user.id
     await api_client.update_profile(telegram_id, {"looking_for": looking_for})
 
-    looking_for_map = {
-        "male": "👨 Парней",
-        "female": "👩 Девушек",
-        "both": "💕 Всех",
-    }
     await callback.message.edit_text(
-        f"✅ Теперь ты ищешь: {looking_for_map.get(looking_for, looking_for)}",
+        f"✅ Теперь ты ищешь: {LOOKING_FOR_RU.get(looking_for, looking_for)}",
         reply_markup=profile_menu_keyboard(),
     )
     await state.clear()

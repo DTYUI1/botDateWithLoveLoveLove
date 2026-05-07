@@ -273,6 +273,31 @@ CREATE INDEX idx_sessions_token ON sessions(session_token);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at) WHERE is_active = TRUE;
 
 -- ============================================
+-- DATE IDEAS
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS date_ideas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category date_category_enum NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    avg_cost cost_level_enum,
+    suitable_interests JSONB DEFAULT '[]'::jsonb,
+    city VARCHAR(100),
+    country_code CHAR(2),
+    latitude DECIMAL(9,6) CHECK (latitude BETWEEN -90 AND 90),
+    longitude DECIMAL(9,6) CHECK (longitude BETWEEN -180 AND 180),
+    suggested_count INTEGER DEFAULT 0,
+    positive_feedback_count INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_date_ideas_city ON date_ideas(city, category) WHERE is_active = TRUE;
+CREATE INDEX idx_date_ideas_interests ON date_ideas USING GIN(suitable_interests);
+
+-- ============================================
 -- DAILY LIMITS
 -- ============================================
 
@@ -311,6 +336,9 @@ CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_matches_updated_at BEFORE UPDATE ON matches
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_date_ideas_updated_at BEFORE UPDATE ON date_ideas
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================

@@ -75,3 +75,5 @@ class ProfileShort(BaseModel):
     city: Optional[str] = None
     bio: Optional[str] = None
     interests: List[str] = Field(default_factory=list)
+    primary_photo_url: Optional[str] = None
+    username: Optional[str] = None

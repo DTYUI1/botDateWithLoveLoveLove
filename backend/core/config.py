@@ -37,6 +37,8 @@ class BackendSettings(BaseSettings):
 
     # Redis
     redis_url: str = Field(default="redis://redis:6379/0")
+    celery_broker_url: str | None = Field(default=None)
+    celery_result_backend: str | None = Field(default=None)
 
     # RabbitMQ
     rabbitmq_url: str = Field(
@@ -48,6 +50,8 @@ class BackendSettings(BaseSettings):
     minio_access_key: str = Field(default="minioadmin")
     minio_secret_key: str = Field(default="minioadmin")
     minio_bucket: str = Field(default="profile-photos")
+    minio_secure: bool = Field(default=False)
+    minio_presigned_expiry_seconds: int = Field(default=3600)
 
     # Application
     debug: bool = Field(default=False)

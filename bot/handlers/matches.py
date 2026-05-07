@@ -3,14 +3,41 @@
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from loguru import logger
 
-from keyboards.inline import matches_keyboard
 from api_client import APIClient
+from utils.formatters import format_match_line
 
 router = Router()
+
+
+def _build_matches_view(matches: list) -> tuple[str, InlineKeyboardMarkup]:
+    """Собирает текст списка мэтчей и URL-кнопки 'Написать @username' для каждого."""
+    lines = ["💕 <b>Твои мэтчи:</b>", ""]
+    keyboard_rows: list[list[InlineKeyboardButton]] = []
+
+    for match in matches:
+        match_profile = match.get("profile", {}) or {}
+        username = match_profile.get("username")
+        name = match_profile.get("display_name") or "Аноним"
+
+        lines.append(format_match_line(match_profile))
+
+        if username:
+            keyboard_rows.append([InlineKeyboardButton(
+                text=f"💬 Написать {name} (@{username})",
+                url=f"https://t.me/{username}",
+            )])
+        else:
+            keyboard_rows.append([InlineKeyboardButton(
+                text=f"ℹ️ {name} — без @username",
+                callback_data="noop",
+            )])
+
+    lines.append("")
+    lines.append("Напиши /search чтобы продолжить поиск!")
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
 
 @router.message(F.text == "/matches")
@@ -18,7 +45,6 @@ async def cmd_matches(message: Message, api_client: APIClient):
     """Показать список мэтчей."""
     telegram_id = message.from_user.id
 
-    # Проверяем, есть ли профиль
     profile = await api_client.get_profile(telegram_id)
     if not profile:
         await message.answer(
@@ -37,27 +63,8 @@ async def cmd_matches(message: Message, api_client: APIClient):
             )
             return
 
-        # Формируем список мэтчей
-        matches_text = "💕 <b>Твои мэтчи:</b>\n\n"
-        for match in matches:
-            match_profile = match.get("profile", {})
-            name = match_profile.get("display_name", "Аноним")
-            city = match_profile.get("city", "")
-            age = match_profile.get("age", "")
-
-            line = f"👤 {name}"
-            if age:
-                line += f", {age}"
-            if city:
-                line += f", {city}"
-            matches_text += line + "\n"
-
-        matches_text += "\nНапиши /search чтобы продолжить поиск!"
-
-        await message.answer(
-            matches_text,
-            reply_markup=matches_keyboard(),
-        )
+        text, kb = _build_matches_view(matches)
+        await message.answer(text, reply_markup=kb)
 
     except Exception as e:
         logger.error(f"Ошибка получения мэтчей: {e}")
@@ -78,24 +85,16 @@ async def cb_list_matches(callback: CallbackQuery, api_client: APIClient):
                 "Продолжай свайпать анкеты!"
             )
         else:
-            matches_text = "💕 <b>Твои мэтчи:</b>\n\n"
-            for match in matches:
-                match_profile = match.get("profile", {})
-                name = match_profile.get("display_name", "Аноним")
-                city = match_profile.get("city", "")
-                age = match_profile.get("age", "")
-
-                line = f"👤 {name}"
-                if age:
-                    line += f", {age}"
-                if city:
-                    line += f", {city}"
-                matches_text += line + "\n"
-
-            await callback.message.edit_text(matches_text)
+            text, kb = _build_matches_view(matches)
+            await callback.message.edit_text(text, reply_markup=kb)
 
     except Exception as e:
         logger.error(f"Ошибка получения мэтчей: {e}")
         await callback.answer("❌ Произошла ошибка", show_alert=True)
 
+    await callback.answer()
+
+
+@router.callback_query(F.data == "noop")
+async def cb_noop(callback: CallbackQuery):
     await callback.answer()

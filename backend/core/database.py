@@ -51,6 +51,7 @@ async def init_db():
         import models.match  # noqa: F401
         import models.message  # noqa: F401
         import models.rating  # noqa: F401
+        import models.date_idea  # noqa: F401
 
         await conn.run_sync(Base.metadata.create_all)
 

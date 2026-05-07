@@ -12,7 +12,10 @@ from sqlalchemy.orm import selectinload
 
 from models.user import User
 from models.profile import Profile
+from models.photo import Photo as PhotoModel
 from schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse, ProfileShort
+from services.photo_service import PhotoService
+from loguru import logger
 
 
 def calculate_age(birth_date: date) -> int:
@@ -43,6 +46,51 @@ class ProfileService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _get_primary_photo_url(self, profile_id) -> Optional[str]:
+        """Получить относительный путь /api/v1/profile/photo/{id}/raw для основного фото.
+
+        Бот сам достанет байты у backend (которому MinIO доступен по docker-имени),
+        и отправит их в Telegram через BufferedInputFile — поэтому presigned URL
+        не нужен (Telegram не достучится до minio:9000).
+        """
+        try:
+            result = await self.db.execute(
+                select(PhotoModel).where(
+                    and_(
+                        PhotoModel.profile_id == profile_id,
+                        PhotoModel.is_primary.is_(True),
+                        PhotoModel.deleted_at.is_(None),
+                    )
+                ).limit(1)
+            )
+            photo = result.scalar_one_or_none()
+            if not photo:
+                result = await self.db.execute(
+                    select(PhotoModel).where(
+                        and_(
+                            PhotoModel.profile_id == profile_id,
+                            PhotoModel.deleted_at.is_(None),
+                        )
+                    ).order_by(PhotoModel.sort_order).limit(1)
+                )
+                photo = result.scalar_one_or_none()
+            if not photo:
+                return None
+            return f"/api/v1/profile/photo/{photo.id}/raw"
+        except Exception as e:
+            logger.warning(f"[ProfileService] Не удалось получить primary photo: {e}")
+            return None
+
+    async def _get_username_by_profile_id(self, profile_id) -> Optional[str]:
+        """Получить telegram username владельца профиля."""
+        result = await self.db.execute(
+            select(User.username)
+            .join(Profile, Profile.user_id == User.id)
+            .where(Profile.id == profile_id)
+        )
+        row = result.first()
+        return row[0] if row else None
 
     # ============================================
     # User
@@ -206,14 +254,24 @@ class ProfileService:
         )
         swiped_ids = {row[0] for row in swiped_result.all()}
 
-        # Фильтруем уже свайпнутые профили
-        query = select(Profile).where(
-            and_(
-                Profile.id != my_profile.id,
-                Profile.is_active == True,
-                Profile.id.notin_(swiped_ids) if swiped_ids else True,
-            )
-        ).limit(1)
+        # Фильтруем уже свайпнутые профили + предпочтения по полу + наличие фото
+        profiles_with_photo = (
+            select(PhotoModel.profile_id)
+            .where(PhotoModel.deleted_at.is_(None))
+        ).scalar_subquery()
+
+        filters = [
+            Profile.id != my_profile.id,
+            Profile.is_active == True,
+            Profile.id.in_(profiles_with_photo),
+        ]
+        if swiped_ids:
+            filters.append(Profile.id.notin_(swiped_ids))
+        if my_profile.looking_for and my_profile.looking_for != "both":
+            filters.append(Profile.gender == my_profile.looking_for)
+        if my_profile.city:
+            filters.append(Profile.city == my_profile.city)
+        query = select(Profile).where(and_(*filters)).limit(1)
 
         result = await self.db.execute(query)
         profile = result.scalar_one_or_none()
@@ -223,6 +281,9 @@ class ProfileService:
 
         age = calculate_age(profile.date_of_birth) if profile.date_of_birth else None
 
+        primary_photo_url = await self._get_primary_photo_url(profile.id)
+        username = await self._get_username_by_profile_id(profile.id)
+
         return ProfileShort(
             id=profile.id,
             display_name=profile.display_name,
@@ -230,6 +291,8 @@ class ProfileService:
             city=profile.city,
             bio=profile.bio,
             interests=profile.interests or [],
+            primary_photo_url=primary_photo_url,
+            username=username,
         )
 
     async def record_swipe(
@@ -250,8 +313,9 @@ class ProfileService:
         self.db.add(swipe)
 
         is_match = False
-        match_id = None
+        match = None
         match_profile_name = None
+        match_username = None
 
         # Если лайк — проверяем взаимность
         if action == "like":
@@ -275,22 +339,27 @@ class ProfileService:
                 )
                 self.db.add(match)
                 is_match = True
-                match_id = match.id
 
-                # Получаем имя профиля для уведомления
-                profile_result = await self.db.execute(
-                    select(Profile).where(Profile.id == swiped_id)
+                # Получаем имя и username партнёра для уведомления
+                partner_result = await self.db.execute(
+                    select(Profile, User)
+                    .join(User, Profile.user_id == User.id)
+                    .where(Profile.id == swiped_id)
                 )
-                swiped_profile = profile_result.scalar_one_or_none()
-                if swiped_profile:
+                row = partner_result.first()
+                if row:
+                    swiped_profile, swiped_user = row
                     match_profile_name = swiped_profile.display_name
+                    match_username = swiped_user.username
 
         await self.db.flush()
 
         return {
             "is_match": is_match,
-            "match_id": match_id,
+            "swipe_id": swipe.id,
+            "match_id": match.id if match else None,
             "match_profile_name": match_profile_name,
+            "match_username": match_username,
         }
 
     async def get_matches(self, telegram_id: int) -> List[dict]:
@@ -328,12 +397,16 @@ class ProfileService:
         for match in matches:
             partner_id = match.profile2_id if match.profile1_id == my_profile.id else match.profile1_id
             partner_result = await self.db.execute(
-                select(Profile).where(Profile.id == partner_id)
+                select(Profile, User)
+                .join(User, Profile.user_id == User.id)
+                .where(Profile.id == partner_id)
             )
-            partner = partner_result.scalar_one_or_none()
+            row = partner_result.first()
 
-            if partner:
+            if row:
+                partner, partner_user = row
                 age = calculate_age(partner.date_of_birth) if partner.date_of_birth else None
+                primary_photo_url = await self._get_primary_photo_url(partner.id)
                 result_list.append({
                     "id": match.id,
                     "profile": ProfileShort(
@@ -343,6 +416,8 @@ class ProfileService:
                         city=partner.city,
                         bio=partner.bio,
                         interests=partner.interests or [],
+                        primary_photo_url=primary_photo_url,
+                        username=partner_user.username,
                     ),
                     "message_count": match.message_count,
                     "last_message_at": match.last_message_at,

@@ -6,15 +6,16 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from loguru import logger
 
+from models.photo import Photo as PhotoModel
+
 from core.database import get_db
-from core.config import settings
 from models.user import User
 from models.profile import Profile
-from models.photo import Photo as PhotoModel
 from services.photo_service import PhotoService
 
 router = APIRouter(prefix="/profile/photo", tags=["photos"])
@@ -77,13 +78,17 @@ async def upload_photo(
         if not validation["valid"]:
             raise HTTPException(status_code=400, detail=validation["error"])
         
-        # Генерируем S3 ключ
+        # Генерируем S3 ключ и загружаем объект в приватный bucket MinIO
         s3_key = photo_service.generate_s3_key(str(profile.id), filename)
-        
-        # TODO: Загрузить в MinIO (когда MinIO будет доступен)
-        # minio_client = MinIOClient(...)
-        # await minio_client.upload_photo(BytesIO(file_content), s3_key, content_type)
-        logger.info(f"[Backend Photo] Загрузка в MinIO: {s3_key} (TODO)")
+        try:
+            storage_url = await photo_service.upload_to_storage(
+                file_content=file_content,
+                s3_key=s3_key,
+                content_type=content_type,
+            )
+        except Exception as e:
+            logger.error(f"[Backend Photo] ОШИБКА MinIO upload: {type(e).__name__}: {e}")
+            raise HTTPException(status_code=502, detail="Не удалось загрузить фото в хранилище")
         
         # Создаём запись в БД
         photo = await photo_service.create_photo_record(
@@ -99,6 +104,8 @@ async def upload_photo(
         return {
             "photo_id": str(photo.id),
             "s3_key": photo.s3_key,
+            "s3_bucket": photo.s3_bucket,
+            "storage_url": storage_url,
             "is_primary": photo.is_primary,
             "message": "Фото успешно загружено",
         }
@@ -136,23 +143,54 @@ async def get_photos(
         photo_service = PhotoService(db)
         photos = await photo_service.get_profile_photos(str(profile.id))
         
-        return [
-            {
+        result = []
+        for photo in photos:
+            result.append({
                 "id": str(photo.id),
                 "s3_key": photo.s3_key,
+                "s3_bucket": photo.s3_bucket,
+                "url": f"/api/v1/profile/photo/{photo.id}/raw",
                 "is_primary": photo.is_primary,
                 "mime_type": photo.mime_type,
                 "file_size_bytes": photo.file_size_bytes,
                 "created_at": photo.created_at.isoformat() if photo.created_at else None,
-            }
-            for photo in photos
-        ]
+            })
+
+        return result
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"[Backend Photo] ОШИБКА get_photos: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Не удалось получить фото")
+
+
+@router.get("/{photo_id}/raw")
+async def get_photo_raw(
+    photo_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Отдать байты фото напрямую (для bot, который проксирует фото в Telegram)."""
+    result = await db.execute(
+        select(PhotoModel).where(
+            and_(
+                PhotoModel.id == photo_id,
+                PhotoModel.deleted_at.is_(None),
+            )
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Фото не найдено")
+
+    photo_service = PhotoService(db)
+    try:
+        data = await photo_service.get_photo_bytes(photo.s3_key)
+    except Exception as e:
+        logger.error(f"[Backend Photo] Не удалось получить байты {photo.s3_key}: {e}")
+        raise HTTPException(status_code=502, detail="Не удалось получить фото")
+
+    return Response(content=data, media_type=photo.mime_type or "image/jpeg")
 
 
 @router.delete("/{photo_id}", response_model=dict)
@@ -185,10 +223,12 @@ async def delete_photo(
         if not photo:
             raise HTTPException(status_code=404, detail="Фото не найдено")
         
+        try:
+            await photo_service.delete_from_storage(photo.s3_key)
+        except Exception as e:
+            logger.warning(f"[Backend Photo] Фото помечено удалённым, но MinIO delete не выполнен: {e}")
+
         await db.commit()
-        
-        # TODO: Удалить из MinIO
-        # minio_client.delete_photo(photo.s3_key)
         
         return {"message": "Фото удалено"}
         

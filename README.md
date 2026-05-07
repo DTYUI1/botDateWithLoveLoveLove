@@ -82,10 +82,38 @@ connectme/
 
 ## 🧪 Тестирование
 
+Подробности — в [`tests/README.md`](tests/README.md).
+
 ```bash
-# Запустить тесты
-docker-compose run --rm backend pytest
+# Unit-тесты (моки, без сервисов)
+.venv/bin/python -m pytest tests/ -v
+
+# Полный прогон (unit + infra) — infra тесты пропускаются без сервисов
+bash scripts/run-tests.sh
 ```
+
+## 🚢 Production deploy
+
+Production-конфигурация подключает RabbitMQ, MinIO, Celery worker/beat, nginx,
+Prometheus и Grafana поверх базового стека.
+
+```bash
+cp .env.example .env        # заполнить секреты
+bash scripts/deploy.sh      # build + up + health-check
+```
+
+Доступные интерфейсы:
+
+| Сервис     | URL                              |
+|------------|----------------------------------|
+| API        | `http://<host>/api/v1/health`    |
+| Grafana    | `http://<host>:3000`             |
+| Prometheus | `http://<host>:9090`             |
+| RabbitMQ   | `http://<host>:15672`            |
+| MinIO      | `http://<host>:9001`             |
+
+Бэкап БД (cron на хосте): `bash scripts/backup-db.sh` — дамп в `./backups/` с
+ротацией (хранятся 14 последних).
 
 ## 📝 Лицензия
 

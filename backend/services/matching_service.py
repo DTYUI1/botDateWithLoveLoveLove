@@ -18,9 +18,11 @@ from sqlalchemy.orm import selectinload
 
 from models.profile import Profile
 from models.user import User
+from models.photo import Photo as PhotoModel
 from models.swipe import Swipe as SwipeModel
 from models.rating import RatingCombined as RatingCombinedModel
 from infrastructure.redis.cache_patterns import ProfileSessionCache
+from loguru import logger
 
 
 class MatchingService:
@@ -100,6 +102,12 @@ class MatchingService:
         swiped_ids = {row[0] for row in swiped_result.all()}
 
         # 3. Построить запрос с фильтрами
+        # Подзапрос: id профилей, у которых есть хотя бы одно неудалённое фото
+        profiles_with_photo = (
+            select(PhotoModel.profile_id)
+            .where(PhotoModel.deleted_at.is_(None))
+        ).scalar_subquery()
+
         query = (
             select(
                 Profile,
@@ -114,6 +122,7 @@ class MatchingService:
                     Profile.id != my_profile.id,
                     Profile.is_active == True,
                     Profile.id.notin_(swiped_ids) if swiped_ids else True,
+                    Profile.id.in_(profiles_with_photo),
                 )
             )
         )
@@ -133,11 +142,42 @@ class MatchingService:
         result = await self.db.execute(query)
         rows = result.all()
 
+        if not rows:
+            return []
+
+        profile_ids = [profile.id for profile, _ in rows]
+
+        # 7a. Подгружаем primary photos одним запросом
+        photo_result = await self.db.execute(
+            select(PhotoModel).where(
+                and_(
+                    PhotoModel.profile_id.in_(profile_ids),
+                    PhotoModel.deleted_at.is_(None),
+                )
+            ).order_by(PhotoModel.is_primary.desc(), PhotoModel.sort_order)
+        )
+        primary_photo_by_profile = {}
+        for photo in photo_result.scalars().all():
+            primary_photo_by_profile.setdefault(photo.profile_id, photo)
+
+        # 7b. Подгружаем username владельцев профилей
+        user_result = await self.db.execute(
+            select(Profile.id, User.username)
+            .join(User, Profile.user_id == User.id)
+            .where(Profile.id.in_(profile_ids))
+        )
+        username_by_profile = {pid: uname for pid, uname in user_result.all()}
+
         # 8. Преобразовать в dict
         profiles = []
         for profile, rating_score in rows:
             age = self._calculate_age(profile.date_of_birth) if profile.date_of_birth else None
-            
+
+            primary_photo_url = None
+            photo = primary_photo_by_profile.get(profile.id)
+            if photo:
+                primary_photo_url = f"/api/v1/profile/photo/{photo.id}/raw"
+
             profiles.append({
                 "id": str(profile.id),
                 "display_name": profile.display_name,
@@ -146,6 +186,8 @@ class MatchingService:
                 "bio": profile.bio,
                 "interests": profile.interests or [],
                 "rating_score": float(rating_score) if rating_score else 0.0,
+                "primary_photo_url": primary_photo_url,
+                "username": username_by_profile.get(profile.id),
             })
 
         return profiles
