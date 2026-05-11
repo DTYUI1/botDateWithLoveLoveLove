@@ -92,8 +92,8 @@ echo "📁 Setting up MinIO buckets..."
 if [ -f infrastructure/minio/setup.sh ]; then
     chmod +x infrastructure/minio/setup.sh
     # Запустить setup внутри контейнера MinIO
-    docker exec connectme-minio sh -c "
-        mc alias set myminio http://localhost:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin} && \
+docker exec connectme-minio sh -c "
+        mc alias set myminio http://localhost:9000 ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required} ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required} && \
         mc mb myminio/profile-photos --ignore-existing && \
         mc anonymous set none myminio/profile-photos
     " || echo "⚠️  MinIO setup failed, continuing..."
@@ -110,8 +110,8 @@ echo ""
 echo "📊 Access services:"
 echo "   PostgreSQL: localhost:5432"
 echo "   Redis: localhost:6379"
-echo "   RabbitMQ Management: http://localhost:15672 (guest/guest)"
-echo "   MinIO Console: http://localhost:9001 (minioadmin/minioadmin)"
+echo "   RabbitMQ Management: http://localhost:15672 (credentials from .env)"
+echo "   MinIO Console: http://localhost:9001 (credentials from .env)"
 echo ""
 echo "🎯 Next steps:"
 echo "   1. Run tests: cd test && pytest"

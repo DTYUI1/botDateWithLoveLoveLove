@@ -66,7 +66,7 @@ infrastructure/
 host: localhost
 port: 5432
 user: connectme_user
-password: connectme_secure_pass_2024
+password: <POSTGRES_PASSWORD из локального .env>
 database: connectme_db
 ```
 
@@ -112,7 +112,7 @@ url: redis://localhost:6379/0
 host: localhost
 port: 5672
 user: guest
-password: guest
+password: <RABBITMQ_PASSWORD из локального .env>
 Management UI: http://localhost:15672
 ```
 
@@ -125,8 +125,8 @@ Management UI: http://localhost:15672
 **Подключение:**
 ```
 endpoint: localhost:9000
-access_key: minioadmin
-secret_key: minioadmin_secure_2024
+access_key: <MINIO_ACCESS_KEY из локального .env>
+secret_key: <MINIO_SECRET_KEY из локального .env>
 Console: http://localhost:9001
 ```
 
@@ -187,12 +187,14 @@ async with EventPublisher(rabbitmq_url) as publisher:
 ### MinIO Client
 
 ```python
+import os
+
 from infrastructure.minio.minio_client import MinIOClient
 
 client = MinIOClient(
     endpoint="localhost:9000",
-    access_key="minioadmin",
-    secret_key="minioadmin",
+    access_key=os.environ["MINIO_ACCESS_KEY"],
+    secret_key=os.environ["MINIO_SECRET_KEY"],
     bucket_name="profile-photos"
 )
 
@@ -237,19 +239,19 @@ presigned_url = await client.get_presigned_url("user_123/photo_1.jpg")
 ```bash
 # PostgreSQL
 POSTGRES_USER=connectme_user
-POSTGRES_PASSWORD=connectme_secure_pass_2024
+POSTGRES_PASSWORD=REQUIRED_POSTGRES_PASSWORD
 POSTGRES_DB=connectme_db
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
 
 # RabbitMQ
-RABBITMQ_USER=guest
-RABBITMQ_PASSWORD=guest
+RABBITMQ_USER=REQUIRED_RABBITMQ_USER
+RABBITMQ_PASSWORD=REQUIRED_RABBITMQ_PASSWORD
 
 # MinIO
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin_secure_2024
+MINIO_ACCESS_KEY=REQUIRED_MINIO_ACCESS_KEY
+MINIO_SECRET_KEY=REQUIRED_MINIO_SECRET_KEY
 ```
 
 ## Тесты

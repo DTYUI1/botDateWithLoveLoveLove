@@ -8,6 +8,18 @@ RUN_DIR="$PROJECT_ROOT/.run"
 LOG_DIR="$PROJECT_ROOT/logs"
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    . "$PROJECT_ROOT/.env"
+    set +a
+fi
+
+: "${POSTGRES_USER:?POSTGRES_USER is required}"
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+: "${POSTGRES_DB:?POSTGRES_DB is required}"
+: "${RABBITMQ_USER:?RABBITMQ_USER is required}"
+: "${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}"
+
 export PYTHONPATH=.
 export HTTP_PROXY="http://127.0.0.1:7897"
 export HTTPS_PROXY="http://127.0.0.1:7897"
@@ -24,9 +36,9 @@ fi
 # === Backend ===
 cd "$PROJECT_ROOT/backend"
 # httpx/asyncpg/redis для backend ходят на localhost — прокси выключаем для backend-процесса
-DATABASE_URL="postgresql+asyncpg://connectme_user:connectme_secure_pass@127.0.0.1:5432/connectme_db" \
+DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}" \
 REDIS_URL="redis://127.0.0.1:6379/0" \
-RABBITMQ_URL="amqp://guest:guest@127.0.0.1:5672//" \
+RABBITMQ_URL="amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@127.0.0.1:5672//" \
 HTTP_PROXY="" HTTPS_PROXY="" ALL_PROXY="" http_proxy="" https_proxy="" all_proxy="" \
 nohup ../.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8005 \
     > "$LOG_DIR/backend.log" 2>&1 &

@@ -16,9 +16,9 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
-from models.profile import Profile
 from models.photo import Photo as PhotoModel
 from core.config import settings
+from core.minio import get_minio_client
 from infrastructure.minio.minio_client import MinIOClient
 
 
@@ -97,14 +97,8 @@ class PhotoService:
         return f"{profile_id}/{unique_id}.{ext.lower()}"
 
     def get_storage_client(self) -> MinIOClient:
-        """Создать клиент MinIO из backend settings."""
-        return MinIOClient(
-            endpoint=settings.minio_endpoint,
-            access_key=settings.minio_access_key,
-            secret_key=settings.minio_secret_key,
-            bucket_name=settings.minio_bucket,
-            secure=settings.minio_secure,
-        )
+        """Вернуть singleton MinIO-клиент (см. core.minio)."""
+        return get_minio_client()
 
     async def upload_to_storage(
         self,

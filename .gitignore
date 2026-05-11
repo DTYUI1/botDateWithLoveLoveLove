@@ -55,3 +55,31 @@ docs/temp
 
 # practice
 practice/
+
+# Run state / runtime
+.run/
+*.pid
+*.sock
+
+# Nohup и локальные раннеры
+bot_nohup.log
+backend/backend.log
+nohup.out
+
+# Локальные результаты нагрузочных тестов.
+# CSV verification-артефакты Stage4 можно коммитить для аудита.
+tests/load/results/*
+!tests/load/results/seed.log
+!tests/load/results/*.csv
+
+# Локальные служебные директории
+.logs/
+
+# Локальные дампы БД
+backups/
+*.dump
+*.sql.gz
+
+# Test-coverage артефакты
+.coverage.*
+coverage.xml

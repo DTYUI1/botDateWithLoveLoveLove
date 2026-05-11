@@ -8,8 +8,7 @@
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
-from decimal import Decimal
+from datetime import datetime
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -435,7 +434,7 @@ class RatingService:
             select(func.count(PhotoModel.id)).where(
                 and_(
                     PhotoModel.profile_id == profile.id,
-                    PhotoModel.is_primary == True,
+                    PhotoModel.is_primary.is_(True),
                     PhotoModel.deleted_at.is_(None)
                 )
             )

@@ -5,7 +5,6 @@
 без реального брокера.
 """
 
-import pytest
 
 
 def test_celery_app_importable():

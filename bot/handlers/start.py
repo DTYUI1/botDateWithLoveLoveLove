@@ -44,7 +44,7 @@ async def cmd_start(message: Message, state: FSMContext, api_client: APIClient):
             logger.error(f"[start] ОШИБКА отправки ответа: {e}")
     else:
         # Новый пользователь
-        logger.info(f"[start] Новый пользователь, показываю регистрацию")
+        logger.info("[start] Новый пользователь, показываю регистрацию")
         try:
             await message.answer(
                 f"💕 Добро пожаловать в ConnectMe, {message.from_user.first_name}!\n\n"

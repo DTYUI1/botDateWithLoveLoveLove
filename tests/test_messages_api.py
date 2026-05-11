@@ -5,7 +5,6 @@ Unit-тесты MessageService (backend/services/message_service.py).
 """
 
 import pytest
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 

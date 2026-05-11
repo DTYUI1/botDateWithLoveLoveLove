@@ -3,13 +3,22 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Отдельно от docker-compose.infra.yml — этот файл подключает RabbitMQ, MinIO,
-# Prometheus и Grafana к основному стеку, добавляет Celery worker и nginx-прокси.
+# Prometheus и Grafana к основному стеку, добавляет Celery worker, consumer'ы
+# RabbitMQ и nginx-прокси.
+#
+# Все чувствительные переменные обязательны (через ${VAR:?}). Запуск без .env
+# или без обязательной переменной завершится с понятным сообщением.
 
 x-logging: &default-logging
   driver: json-file
   options:
     max-size: "10m"
     max-file: "3"
+
+x-celery-env: &celery-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER не задан}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан}@db:5432/${POSTGRES_DB:?POSTGRES_DB не задан}
+  REDIS_URL: redis://redis:6379/0
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER не задан}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD не задан}@rabbitmq:5672//
 
 services:
   backend:
@@ -18,12 +27,12 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER не задан}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан}@db:5432/${POSTGRES_DB:?POSTGRES_DB не задан}
       - REDIS_URL=redis://redis:6379/0
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:?RABBITMQ_USER не задан}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD не задан}@rabbitmq:5672//
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY не задан}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?MINIO_SECRET_KEY не задан}
       - MINIO_BUCKET=${MINIO_BUCKET:-profile-photos}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -58,7 +67,7 @@ services:
     restart: always
     logging: *default-logging
 
-  # === Celery worker (фоновый пересчёт рейтингов) ===
+  # === Celery worker (фоновые задачи) ===
   celery_worker:
     build:
       context: .
@@ -67,9 +76,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379/0
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      <<: *celery-env
     depends_on:
       backend:
         condition: service_healthy
@@ -87,8 +94,7 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379/0
+      <<: *celery-env
     depends_on:
       celery_worker:
         condition: service_started
@@ -97,18 +103,73 @@ services:
     restart: always
     logging: *default-logging
 
+  # === RabbitMQ consumer: события свайпов → точечный пересчёт рейтинга ===
+  swipe_consumer:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: python -m workers.swipe_consumer
+    env_file:
+      - .env
+    environment:
+      <<: *celery-env
+    depends_on:
+      backend:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - connectme-network
+    restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f swipe_consumer || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # === RabbitMQ consumer бота: уведомления о мэтчах ===
+  match_consumer:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    command: python -m workers.match_consumer
+    env_file:
+      - .env
+    environment:
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:?RABBITMQ_USER не задан}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD не задан}@rabbitmq:5672//
+      - BACKEND_URL=http://backend:8000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN не задан}
+    depends_on:
+      backend:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - connectme-network
+    restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f match_consumer || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # === RabbitMQ с включённым Prometheus-плагином ===
   rabbitmq:
     image: rabbitmq:3.13-management
     environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:?RABBITMQ_USER не задан}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD не задан}
     ports:
       - "5672:5672"
       - "15672:15672"
       - "15692:15692"  # Prometheus metrics
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     networks:
       - connectme-network
     restart: always
@@ -116,14 +177,20 @@ services:
     command: >
       bash -c "rabbitmq-plugins enable --offline rabbitmq_prometheus &&
                rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-  # === MinIO ===
+  # === MinIO (закреплённый тег вместо :latest) ===
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
     command: server /data --console-address ":9001"
     environment:
-      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY не задан}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:?MINIO_SECRET_KEY не задан}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -156,7 +223,7 @@ services:
 
   # === Prometheus ===
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.55.1
     volumes:
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -169,10 +236,10 @@ services:
 
   # === Grafana ===
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.3.1
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER не задан}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD не задан}
       - GF_USERS_ALLOW_SIGN_UP=false
     ports:
       - "3000:3000"

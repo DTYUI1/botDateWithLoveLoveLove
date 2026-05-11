@@ -3,12 +3,12 @@ HTTP-клиент для взаимодействия с Backend API.
 """
 
 from typing import Optional, Dict, Any, List
-from contextlib import asynccontextmanager
 
 import httpx
 from loguru import logger
 
 from config import settings
+from metrics import BOT_API_ERRORS_TOTAL
 
 
 class APIClient:
@@ -46,6 +46,11 @@ class APIClient:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
+    def _raise_for_status(self, response: httpx.Response, op: str) -> None:
+        if response.status_code >= 400:
+            BOT_API_ERRORS_TOTAL.labels(op=op).inc()
+        response.raise_for_status()
+
     # ============================================
     # User / Auth
     # ============================================
@@ -70,7 +75,7 @@ class APIClient:
                 "language_code": language_code,
             },
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "auth_telegram")
         return response.json()
 
     # ============================================
@@ -89,9 +94,11 @@ class APIClient:
             logger.debug(f"[APIClient] Ответ профиля: status={response.status_code}")
             if response.status_code == 404:
                 return None
-            response.raise_for_status()
+            self._raise_for_status(response, "get_profile")
             return response.json()
         except Exception as e:
+            if not isinstance(e, httpx.HTTPStatusError):
+                BOT_API_ERRORS_TOTAL.labels(op="get_profile").inc()
             logger.error(f"[APIClient] ОШИБКА get_profile: {type(e).__name__}: {e}")
             raise
 
@@ -103,7 +110,7 @@ class APIClient:
             params={"telegram_id": telegram_id},
             json=profile_data,
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "create_profile")
         return response.json()
 
     async def update_profile(self, telegram_id: int, profile_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -114,7 +121,7 @@ class APIClient:
             params={"telegram_id": telegram_id},
             json=profile_data,
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "update_profile")
         return response.json()
 
     # ============================================
@@ -143,7 +150,7 @@ class APIClient:
         )
         if response.status_code == 404:
             return None
-        response.raise_for_status()
+        self._raise_for_status(response, "matching_next")
         return response.json()
 
     async def swipe(
@@ -159,7 +166,7 @@ class APIClient:
             params={"telegram_id": telegram_id},
             json={"profile_id": target_profile_id, "action": action},
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "matching_swipe")
         return response.json()
 
     async def get_matches(self, telegram_id: int) -> List[Dict[str, Any]]:
@@ -169,7 +176,7 @@ class APIClient:
             "/api/v1/matching/matches",
             params={"telegram_id": telegram_id},
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "get_matches")
         return response.json()
 
     async def refresh_session(
@@ -195,7 +202,7 @@ class APIClient:
             "/api/v1/matching/session/refresh",
             params=params,
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "refresh_session")
         return response.json()
 
     # ============================================
@@ -225,7 +232,7 @@ class APIClient:
                 params={"telegram_id": telegram_id},
                 timeout=30.0,
             )
-            response.raise_for_status()
+            self._raise_for_status(response, "upload_photo")
             return response.json()
 
     async def fetch_photo_bytes(self, photo_url: str) -> Optional[bytes]:
@@ -238,10 +245,12 @@ class APIClient:
             url = photo_url if photo_url.startswith("http") else photo_url
             response = await client.get(url, timeout=15.0)
             if response.status_code != 200:
+                BOT_API_ERRORS_TOTAL.labels(op="fetch_photo_bytes").inc()
                 logger.warning(f"[APIClient] fetch_photo_bytes {url} status={response.status_code}")
                 return None
             return response.content
         except Exception as e:
+            BOT_API_ERRORS_TOTAL.labels(op="fetch_photo_bytes").inc()
             logger.error(f"[APIClient] fetch_photo_bytes ОШИБКА: {type(e).__name__}: {e}")
             return None
 
@@ -252,7 +261,7 @@ class APIClient:
             "/api/v1/profile/photo",
             params={"telegram_id": telegram_id},
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "get_photos")
         return response.json()
 
     async def delete_photo(self, telegram_id: int, photo_id: str) -> Dict[str, Any]:
@@ -262,7 +271,7 @@ class APIClient:
             f"/api/v1/profile/photo/{photo_id}",
             params={"telegram_id": telegram_id},
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "delete_photo")
         return response.json()
 
     async def set_primary_photo(self, telegram_id: int, photo_id: str) -> Dict[str, Any]:
@@ -272,7 +281,7 @@ class APIClient:
             f"/api/v1/profile/photo/{photo_id}/set-primary",
             params={"telegram_id": telegram_id},
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "set_primary_photo")
         return response.json()
 
     # ============================================
@@ -288,7 +297,7 @@ class APIClient:
         )
         if response.status_code == 404:
             return None
-        response.raise_for_status()
+        self._raise_for_status(response, "get_rating")
         return response.json()
 
     # ============================================
@@ -304,7 +313,7 @@ class APIClient:
         )
         if response.status_code == 404:
             return None
-        response.raise_for_status()
+        self._raise_for_status(response, "get_settings")
         return response.json()
 
     async def update_settings(self, telegram_id: int, settings_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -315,7 +324,7 @@ class APIClient:
             params={"telegram_id": telegram_id},
             json=settings_data,
         )
-        response.raise_for_status()
+        self._raise_for_status(response, "update_settings")
         return response.json()
 
     # ============================================
@@ -329,4 +338,5 @@ class APIClient:
             response = await client.get("/api/v1/health")
             return response.status_code == 200
         except Exception:
+            BOT_API_ERRORS_TOTAL.labels(op="health_check").inc()
             return False

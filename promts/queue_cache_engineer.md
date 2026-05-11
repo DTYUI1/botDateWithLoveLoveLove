@@ -694,7 +694,7 @@ class MinIOClient:
 ```bash
 # PostgreSQL
 POSTGRES_USER=connectme_user
-POSTGRES_PASSWORD=connectme_secure_pass_2024
+POSTGRES_PASSWORD=REQUIRED_POSTGRES_PASSWORD
 POSTGRES_DB=connectme_db
 DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
 
@@ -702,14 +702,14 @@ DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/
 REDIS_URL=redis://redis:6379/0
 
 # RabbitMQ
-RABBITMQ_USER=guest
-RABBITMQ_PASSWORD=guest
+RABBITMQ_USER=REQUIRED_RABBITMQ_USER
+RABBITMQ_PASSWORD=REQUIRED_RABBITMQ_PASSWORD
 RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672//
 
 # MinIO
 MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin_secure_2024
+MINIO_ACCESS_KEY=REQUIRED_MINIO_ACCESS_KEY
+MINIO_SECRET_KEY=REQUIRED_MINIO_SECRET_KEY
 MINIO_BUCKET=profile-photos
 MINIO_USE_SSL=false
 
@@ -838,4 +838,3 @@ echo "✅ Backups created in $BACKUP_DIR"
 6. **Мониторь здоровье** — health checks для всех сервисов
 7. **Логируй события** — централизованное логирование
 8. **Обеспечь безопасность** — сильные пароли, приватные сети
-

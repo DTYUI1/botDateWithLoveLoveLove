@@ -19,6 +19,13 @@ class BotSettings(BaseSettings):
     # Backend
     backend_url: str = "http://localhost:8005"
 
+    # RabbitMQ (для consumer'ов уведомлений)
+    rabbitmq_url: str = "amqp://REQUIRED_RABBITMQ_USER:REQUIRED_RABBITMQ_PASSWORD@rabbitmq:5672//"
+
+    # /metrics endpoint бота
+    metrics_host: str = "0.0.0.0"
+    metrics_port: int = 8001
+
     # Логирование
     log_level: str = "INFO"
 

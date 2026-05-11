@@ -42,7 +42,7 @@ class DateIdeaService:
         category: Optional[str] = None,
         limit: int = 20,
     ) -> list[DateIdea]:
-        query = select(DateIdea).where(DateIdea.is_active == True)
+        query = select(DateIdea).where(DateIdea.is_active.is_(True))
         if city:
             query = query.where(or_(DateIdea.city == city, DateIdea.city.is_(None)))
         if category:
@@ -108,7 +108,7 @@ class DateIdeaService:
 
     async def add_feedback(self, idea_id: UUID, positive: bool) -> Optional[DateIdea]:
         result = await self.db.execute(
-            select(DateIdea).where(DateIdea.id == idea_id, DateIdea.is_active == True)
+            select(DateIdea).where(DateIdea.id == idea_id, DateIdea.is_active.is_(True))
         )
         idea = result.scalar_one_or_none()
         if not idea:

@@ -2,8 +2,7 @@
 API роутер для работы с фотографиями профиля.
 """
 
-from typing import List, Optional
-from uuid import UUID
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
@@ -100,7 +99,14 @@ async def upload_photo(
         )
         
         await db.commit()
-        
+
+        # Celery: фоновая валидация/превью, не блокирует HTTP-ответ.
+        try:
+            from tasks.photo_tasks import process_photo
+            process_photo.delay(photo_id=str(photo.id))
+        except Exception as e:
+            logger.warning(f"[Backend Photo] Celery process_photo не отправлена: {e}")
+
         return {
             "photo_id": str(photo.id),
             "s3_key": photo.s3_key,
@@ -109,7 +115,7 @@ async def upload_photo(
             "is_primary": photo.is_primary,
             "message": "Фото успешно загружено",
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

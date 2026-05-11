@@ -3,15 +3,36 @@ API роутер для работы с профилями.
 """
 
 from typing import Optional
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from core.database import get_db
+from models.profile import Profile
+from models.user import User
 from schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse
 from services.profile_service import ProfileService
 
 router = APIRouter(prefix="/profile", tags=["profile"])
+
+
+@router.get("/{profile_id}/telegram_id", response_model=dict)
+async def get_profile_telegram_id(
+    profile_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Вернуть telegram_id владельца профиля для фоновых push-consumer'ов."""
+    result = await db.execute(
+        select(User.telegram_id)
+        .join(Profile, Profile.user_id == User.id)
+        .where(Profile.id == profile_id)
+    )
+    telegram_id = result.scalar_one_or_none()
+    if telegram_id is None:
+        raise HTTPException(status_code=404, detail="Профиль не найден")
+    return {"telegram_id": telegram_id}
 
 
 @router.get("", response_model=Optional[ProfileResponse])

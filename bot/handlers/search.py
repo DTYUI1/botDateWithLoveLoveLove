@@ -107,7 +107,7 @@ async def show_next_profile(
     if not session_id:
         # Backend может вернуть session_id в ответе refresh, но get_next_profile его не возвращает
         # Поэтому session_id остаётся None до первого refresh или явно создаётся backend
-        logger.debug(f"[Search] Анкета получена без session_id")
+        logger.debug("[Search] Анкета получена без session_id")
 
     # Если в ответе есть session_id (например, после refresh) — сохраняем
     if isinstance(profile, dict) and profile.get("session_id"):

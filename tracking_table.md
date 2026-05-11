@@ -69,15 +69,39 @@
 
 ---
 
+## Этап 4 (защитный): CI/CD, нагрузка, observability 🟡
+
+Источник: `promts/data/plan-fix/tracking-fix.md` (44 пункта).
+Полный отчёт: `docs/stages/stage4_report.md`,
+по нагрузке — `docs/stages/stage4_loadtest.md`.
+
+| Блок | Состав | Исполнитель | Статус | Артефакт |
+|---|---|---|---|---|
+| 3.1 | CI/CD pipeline (lint+tests+build+secrets+бейдж) | DevOps | ✅ | `.github/workflows/ci.yml`, `README.md` |
+| 3.2 | Нагрузка (Locust): сценарии + seed + отчёт + README | DevOps | 🟡 SLA + stress выполнены, нужен Grafana screenshot | `tests/load/`, `tests/load/results/full_stats.csv`, `tests/load/results/stress_stats.csv`, `docs/stages/stage4_loadtest.md` |
+| 3.3 | RabbitMQ consumer'ы (DLQ, retry, swipe/match) | Queue/Cache + Bot + Backend + DevOps | ✅ | `backend/workers/`, `bot/workers/`, `definitions.json`, `docker-compose.prod.yml` |
+| 3.4 | Расширение Celery (rating/photo/push + триггеры из API) | Backend | ✅ | `backend/tasks/`, `backend/api/v1/matching.py`, `backend/api/v1/photos.py` |
+| 3.5 | Метрики + дашборд (backend + bot + scrape + панели) | Backend + Bot + DevOps | ✅ | `backend/core/metrics.py`, `bot/metrics.py`, `infrastructure/prometheus/prometheus.yml`, `infrastructure/grafana/.../connectme.json` |
+| 3.6 | Stage4 report | все | ✅ | `docs/stages/stage4_report.md` |
+| 3.7 | Compose secrets (`${VAR:?}`, чистый `.env.example`, README) | DevOps | ✅ | `docker-compose*.yml`, `.env.example`, `README.md` |
+| 3.8 | Singleton (MinIO + RMQ publisher + fail-safe) | Backend + Queue/Cache | ✅ | `backend/core/minio.py`, `backend/core/mq.py` |
+| 3.9 | Топология MQ декларируется 1 раз + auto-reconnect | Queue/Cache | ✅ | `infrastructure/rabbitmq/event_publisher.py` |
+| 3.10 | Контекстные логи (ctx-patcher + helper) | Backend + Bot | ✅ инфра, адопция инкрементальна | `backend/core/logging_context.py`, `bot/main.py`, `backend/main.py` |
+| Доп | `.gitignore` под фактическую структуру | DevOps | ✅ | `.gitignore` |
+| А.1–А.4 | Аудит фиксов (3 раунда) | Auditor | ⏳ ожидает | `audit-round-2.md`, `audit-round-3.md`, `audit-final.md` |
+
+---
+
 ## Сводка по проекту
 
 | Метрика | Значение |
 |---------|----------|
-| Всего задач | 36 |
-| Выполнено | 36 |
-| В работе | 0 |
-| Ожидает | 0 |
-| Прогресс | **100%** |
+| Всего задач (этап 1–4) | 36 |
+| Выполнено (этап 1–4) | 36 |
+| Stage4-защитный — задач | 44 |
+| Stage4-защитный — выполнено / подтверждено | 41 |
+| Stage4-защитный — частично / ждёт Grafana/prod consumer/final audit | 3 |
+| Stage4-защитный — прогресс по закрытым пунктам | **~93 %** |
 
 ---
 

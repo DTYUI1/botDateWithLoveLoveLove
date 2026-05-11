@@ -33,19 +33,46 @@ class EventPublisher:
         "match": ("match_events", ExchangeType.TOPIC),
         "rating": ("rating_updates", ExchangeType.TOPIC),
         "chat": ("chat_messages", ExchangeType.TOPIC),
+        "dlx": ("dlx", ExchangeType.TOPIC),
     }
 
+    # Аргументы должны совпадать с infrastructure/rabbitmq/definitions.json,
+    # иначе RabbitMQ откажет в повторной декларации очереди.
     QUEUE_DEFINITIONS = {
         "swipe_processing": {
             "durable": True,
             "arguments": {
                 "x-message-ttl": 60000,
                 "x-max-length": 10000,
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "swipe_processing.dlq",
             },
         },
-        "match_notifications": {"durable": True, "arguments": {}},
-        "rating_calculation": {"durable": True, "arguments": {}},
-        "message_delivery": {"durable": True, "arguments": {}},
+        "match_notifications": {
+            "durable": True,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "match_notifications.dlq",
+            },
+        },
+        "rating_calculation": {
+            "durable": True,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "rating_calculation.dlq",
+            },
+        },
+        "message_delivery": {
+            "durable": True,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "message_delivery.dlq",
+            },
+        },
+        "swipe_processing.dlq": {"durable": True, "arguments": {}},
+        "match_notifications.dlq": {"durable": True, "arguments": {}},
+        "rating_calculation.dlq": {"durable": True, "arguments": {}},
+        "message_delivery.dlq": {"durable": True, "arguments": {}},
     }
 
     BINDINGS = (
@@ -53,6 +80,10 @@ class EventPublisher:
         ("match", "match_notifications", "match.created"),
         ("rating", "rating_calculation", "rating.*"),
         ("chat", "message_delivery", "message.sent"),
+        ("dlx", "swipe_processing.dlq", "swipe_processing.dlq"),
+        ("dlx", "match_notifications.dlq", "match_notifications.dlq"),
+        ("dlx", "rating_calculation.dlq", "rating_calculation.dlq"),
+        ("dlx", "message_delivery.dlq", "message_delivery.dlq"),
     )
 
     VALID_SWIPE_ACTIONS = {"like", "pass", "super_like"}
@@ -63,33 +94,48 @@ class EventPublisher:
         self.connection = None
         self.channel = None
         self.exchanges = {}
+        self._topology_declared = False
 
     async def connect(self):
-        """Подключение к RabbitMQ и объявление topology."""
+        """Подключение к RabbitMQ.
+
+        Использует `aio_pika.connect_robust` — клиент сам переподключается
+        при обрыве. Топология (exchanges/queues/bindings) декларируется
+        **один раз** на первом подключении; дальше горячий путь только
+        publish'ит сообщения.
+        """
+        if self.connection and not self.connection.is_closed:
+            return
         self.connection = await aio_pika.connect_robust(self.rabbitmq_url)
         self.channel = await self.connection.channel()
         await self.channel.set_qos(prefetch_count=100)
 
+        # Exchanges нужно получить в self.exchanges всегда (после reconnect
+        # экземпляры aio_pika уже знают, что декларация была — passive=True
+        # сэкономит RTT).
         for name, (exchange_name, exchange_type) in self.EXCHANGE_DEFINITIONS.items():
             self.exchanges[name] = await self.channel.declare_exchange(
                 exchange_name,
                 exchange_type,
-                durable=True
+                durable=True,
+                passive=self._topology_declared,
             )
 
-        queues = {}
-        for queue_name, options in self.QUEUE_DEFINITIONS.items():
-            queues[queue_name] = await self.channel.declare_queue(
-                queue_name,
-                durable=options["durable"],
-                arguments=options["arguments"],
-            )
+        if not self._topology_declared:
+            queues = {}
+            for queue_name, options in self.QUEUE_DEFINITIONS.items():
+                queues[queue_name] = await self.channel.declare_queue(
+                    queue_name,
+                    durable=options["durable"],
+                    arguments=options["arguments"],
+                )
 
-        for exchange_key, queue_name, routing_key in self.BINDINGS:
-            await queues[queue_name].bind(
-                self.exchanges[exchange_key],
-                routing_key=routing_key,
-            )
+            for exchange_key, queue_name, routing_key in self.BINDINGS:
+                await queues[queue_name].bind(
+                    self.exchanges[exchange_key],
+                    routing_key=routing_key,
+                )
+            self._topology_declared = True
 
     async def publish_swipe_event(
         self,
@@ -219,7 +265,12 @@ class EventPublisher:
         routing_key: str,
         event_data: Dict[str, Any]
     ):
-        """Внутренний метод публикации события."""
+        """Горячий путь публикации события — без declare-операций.
+
+        Если соединение упало между запросами, `connect_robust` восстановит
+        его лениво при первом обращении к exchange. Топология не
+        пере-декларируется (см. флаг _topology_declared).
+        """
         if not self.connection or self.connection.is_closed:
             await self.connect()
 

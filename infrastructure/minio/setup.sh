@@ -4,11 +4,15 @@
 
 set -e
 
+: "${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
+: "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}"
+: "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}"
+
 echo "🚀 Setting up MinIO..."
 
 # Ждём запуска MinIO
 echo "⏳ Waiting for MinIO to be ready..."
-until curl -f http://${MINIO_ENDPOINT:-minio:9000}/minio/health/live &> /dev/null; do
+until curl -f http://${MINIO_ENDPOINT}/minio/health/live &> /dev/null; do
     sleep 2
 done
 
@@ -22,7 +26,7 @@ if ! command -v mc &> /dev/null; then
 fi
 
 # Настраиваем алиас
-mc alias set myminio http://${MINIO_ENDPOINT:-minio:9000} ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin}
+mc alias set myminio "http://${MINIO_ENDPOINT}" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}"
 
 # Создаём bucket для фотографий профилей
 echo "📁 Creating bucket: profile-photos..."
@@ -54,5 +58,5 @@ EOF
 echo "✅ MinIO setup completed!"
 echo "📊 Access MinIO Console: http://localhost:9001"
 echo "   Bucket: profile-photos"
-echo "   Access Key: ${MINIO_ACCESS_KEY:-minioadmin}"
-echo "   Secret Key: ${MINIO_SECRET_KEY:-minioadmin}"
+echo "   Access Key: ${MINIO_ACCESS_KEY}"
+echo "   Secret Key: <redacted>"

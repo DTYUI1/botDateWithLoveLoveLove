@@ -225,10 +225,10 @@ class ProfileResponse(BaseModel):
 ```bash
 DATABASE_URL=postgresql+asyncpg://connectme_user:password@localhost:5432/connectme_db
 REDIS_URL=redis://localhost:6379/0
-RABBITMQ_URL=amqp://guest:guest@localhost:5672//
+RABBITMQ_URL=amqp://REQUIRED_RABBITMQ_USER:REQUIRED_RABBITMQ_PASSWORD@localhost:5672//
 MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+MINIO_ACCESS_KEY=REQUIRED_MINIO_ACCESS_KEY
+MINIO_SECRET_KEY=REQUIRED_MINIO_SECRET_KEY
 MINIO_BUCKET=profile-photos
 LOG_LEVEL=INFO
 DEBUG=false

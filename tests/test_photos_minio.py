@@ -5,7 +5,6 @@ MinIO-клиент полностью замокирован; реального
 """
 
 import pytest
-from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 

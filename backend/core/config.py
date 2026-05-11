@@ -2,7 +2,6 @@
 Конфигурация Backend API.
 """
 
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from pathlib import Path
@@ -32,7 +31,7 @@ class BackendSettings(BaseSettings):
 
     # Database
     database_url: str = Field(
-        default="postgresql+asyncpg://connectme_user:your_secure_password_here@db:5432/connectme_db",
+        default="postgresql+asyncpg://REQUIRED_POSTGRES_USER:REQUIRED_POSTGRES_PASSWORD@db:5432/REQUIRED_POSTGRES_DB",
     )
 
     # Redis
@@ -42,13 +41,13 @@ class BackendSettings(BaseSettings):
 
     # RabbitMQ
     rabbitmq_url: str = Field(
-        default="amqp://guest:guest@rabbitmq:5672//",
+        default="amqp://REQUIRED_RABBITMQ_USER:REQUIRED_RABBITMQ_PASSWORD@rabbitmq:5672//",
     )
 
     # Minio
     minio_endpoint: str = Field(default="minio:9000")
-    minio_access_key: str = Field(default="minioadmin")
-    minio_secret_key: str = Field(default="minioadmin")
+    minio_access_key: str = Field(default="REQUIRED_MINIO_ACCESS_KEY")
+    minio_secret_key: str = Field(default="REQUIRED_MINIO_SECRET_KEY")
     minio_bucket: str = Field(default="profile-photos")
     minio_secure: bool = Field(default=False)
     minio_presigned_expiry_seconds: int = Field(default=3600)

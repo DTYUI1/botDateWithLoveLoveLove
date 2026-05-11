@@ -1,3 +1,6 @@
+# ConnectMe
+
+[![CI](https://github.com/DTYUI1/botDateWithLoveLoveLove/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DTYUI1/botDateWithLoveLoveLove/actions/workflows/ci.yml)
 
 **Страшно подойти первым? Не знаешь, что написать, чтобы не быть банальным?**
 
@@ -17,21 +20,44 @@
 cp .env.example .env
 ```
 
-2. Отредактируйте `.env` и добавьте ваши ключи:
-```bash
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-POSTGRES_PASSWORD=your_secure_password
-```
+2. Отредактируйте `.env` и заполните **все REQUIRED-переменные** (см. ниже).
 
 3. Запустите сервисы:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 4. Проверьте статус:
 ```bash
-docker-compose ps
+docker compose ps
 ```
+
+### 🔐 Переменные окружения и секреты
+
+Все секреты живут в `.env` (в git **не коммитим**) и валидируются прямо в
+`docker-compose*.yml` через `${VAR:?...}` — запуск без `.env` или с пустым
+секретом падает с понятным сообщением (`error while interpolating ...
+POSTGRES_PASSWORD не задан в .env`).
+
+Обязательные переменные (см. шаблон в `.env.example`):
+
+| Переменная | Где используется | Комментарий |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | bot, match_consumer | Токен от @BotFather |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | backend, db, celery | Не используйте дефолтные значения |
+| `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | backend, bot, consumers, rabbitmq | Не использовать `guest/guest` |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | backend, minio | Задать локальные значения, не использовать публичные dev-default credentials |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | grafana (prod overlay) | Только для prod-сборки |
+
+Генерация надёжного пароля:
+
+```bash
+openssl rand -base64 32
+```
+
+CI проверяет отсутствие секретов в репозитории через
+[`gitleaks-action`](https://github.com/gitleaks/gitleaks-action) — см.
+`.github/workflows/ci.yml`. Любой случайно закоммиченный секрет валит сборку.
 
 ## 📁 Структура проекта
 
@@ -90,6 +116,20 @@ connectme/
 
 # Полный прогон (unit + infra) — infra тесты пропускаются без сервисов
 bash scripts/run-tests.sh
+```
+
+### Нагрузочное тестирование (Locust)
+
+Полная инструкция — [`tests/load/README.md`](tests/load/README.md), отчёт —
+[`docs/stages/stage4_loadtest.md`](docs/stages/stage4_loadtest.md).
+
+```bash
+pip install locust httpx
+bash tests/load/seed.sh 100
+mkdir -p tests/load/results
+locust -f tests/load/locustfile.py --host http://localhost:8005 \
+       --users 50 --spawn-rate 10 --run-time 60s --headless \
+       --csv tests/load/results/run --csv-full-history
 ```
 
 ## 🚢 Production deploy

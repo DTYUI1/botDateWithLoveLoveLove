@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Optional, List
 from uuid import UUID
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,7 +14,6 @@ from models.user import User
 from models.profile import Profile
 from models.photo import Photo as PhotoModel
 from schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse, ProfileShort
-from services.photo_service import PhotoService
 from loguru import logger
 
 
@@ -262,7 +261,7 @@ class ProfileService:
 
         filters = [
             Profile.id != my_profile.id,
-            Profile.is_active == True,
+            Profile.is_active.is_(True),
             Profile.id.in_(profiles_with_photo),
         ]
         if swiped_ids:

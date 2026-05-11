@@ -97,7 +97,7 @@ TestCombinedRatingCalculator: 8/8 ✅
 Host: localhost
 Port: 5432
 User: connectme_user
-Password: connectme_secure_pass_2024
+Password: <redacted; берётся из локального .env>
 Database: connectme_db
 ```
 
@@ -113,16 +113,16 @@ URL: redis://localhost:6379/0
 Host: localhost
 AMQP Port: 5672
 Management UI: http://localhost:15672
-User: guest
-Password: guest
+User: <RABBITMQ_USER из локального .env>
+Password: <redacted; берётся из локального .env>
 ```
 
 ### MinIO
 ```
 API: http://localhost:9000
 Console: http://localhost:9001
-Access Key: minioadmin
-Secret Key: minioadmin_secure_2024
+Access Key: <MINIO_ACCESS_KEY из локального .env>
+Secret Key: <redacted; берётся из локального .env>
 Bucket: profile-photos
 ```
 

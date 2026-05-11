@@ -32,6 +32,14 @@
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    },
+    {
+      "name": "dlx",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
     }
   ],
   "queues": [
@@ -41,11 +49,28 @@
       "auto_delete": false,
       "arguments": {
         "x-message-ttl": 60000,
-        "x-max-length": 10000
+        "x-max-length": 10000,
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "swipe_processing.dlq"
       }
     },
     {
+      "name": "swipe_processing.dlq",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
       "name": "match_notifications",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "match_notifications.dlq"
+      }
+    },
+    {
+      "name": "match_notifications.dlq",
       "durable": true,
       "auto_delete": false,
       "arguments": {}
@@ -54,10 +79,28 @@
       "name": "rating_calculation",
       "durable": true,
       "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "rating_calculation.dlq"
+      }
+    },
+    {
+      "name": "rating_calculation.dlq",
+      "durable": true,
+      "auto_delete": false,
       "arguments": {}
     },
     {
       "name": "message_delivery",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx",
+        "x-dead-letter-routing-key": "message_delivery.dlq"
+      }
+    },
+    {
+      "name": "message_delivery.dlq",
       "durable": true,
       "auto_delete": false,
       "arguments": {}
@@ -90,6 +133,34 @@
       "destination": "message_delivery",
       "destination_type": "queue",
       "routing_key": "message.sent",
+      "arguments": {}
+    },
+    {
+      "source": "dlx",
+      "destination": "swipe_processing.dlq",
+      "destination_type": "queue",
+      "routing_key": "swipe_processing.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "dlx",
+      "destination": "match_notifications.dlq",
+      "destination_type": "queue",
+      "routing_key": "match_notifications.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "dlx",
+      "destination": "rating_calculation.dlq",
+      "destination_type": "queue",
+      "routing_key": "rating_calculation.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "dlx",
+      "destination": "message_delivery.dlq",
+      "destination_type": "queue",
+      "routing_key": "message_delivery.dlq",
       "arguments": {}
     }
   ]

@@ -11,7 +11,6 @@ from core.database import get_db
 from models.user import User
 from models.profile import Profile
 from schemas.settings import SettingsResponse, SettingsUpdate
-from services.profile_service import ProfileService
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 

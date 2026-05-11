@@ -4,9 +4,9 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "title": "ConnectMe Backend",
+  "title": "ConnectMe — Business + Infra",
   "uid": "connectme-backend",
-  "version": 1,
+  "version": 2,
   "schemaVersion": 39,
   "tags": ["connectme"],
   "timezone": "browser",
@@ -22,17 +22,25 @@
       "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
     },
     {
+      "type": "stat",
+      "title": "Bot up",
+      "id": 11,
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [{"expr": "up{job=\"connectme-bot\"}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
       "type": "timeseries",
       "title": "Requests per second (RPS)",
       "id": 2,
-      "gridPos": {"x": 4, "y": 0, "w": 10, "h": 8},
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 8},
       "targets": [{"expr": "sum by (handler) (rate(http_requests_total{job=\"connectme-backend\"}[1m]))", "legendFormat": "{{handler}}", "refId": "A"}]
     },
     {
       "type": "timeseries",
       "title": "p95 latency",
       "id": 3,
-      "gridPos": {"x": 14, "y": 0, "w": 10, "h": 8},
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 8},
       "targets": [{"expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket{job=\"connectme-backend\"}[5m])))", "legendFormat": "p95 {{handler}}", "refId": "A"}],
       "fieldConfig": {"defaults": {"unit": "s"}}
     },
@@ -49,6 +57,122 @@
       "id": 5,
       "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
       "targets": [{"expr": "http_requests_inprogress{job=\"connectme-backend\"}", "refId": "A"}]
+    },
+
+    {
+      "type": "row",
+      "title": "Бизнес-метрики",
+      "id": 100,
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Свайпы / минуту (по action)",
+      "id": 101,
+      "gridPos": {"x": 0, "y": 17, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (action) (rate(connectme_swipes_total[1m]) * 60)", "legendFormat": "{{action}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Мэтчи / минуту",
+      "id": 102,
+      "gridPos": {"x": 12, "y": 17, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(connectme_matches_total[1m]) * 60", "legendFormat": "matches/min", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 swipe duration",
+      "id": 103,
+      "gridPos": {"x": 0, "y": 25, "w": 12, "h": 8},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(connectme_swipe_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "id": 104,
+      "gridPos": {"x": 12, "y": 25, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (cache) (rate(connectme_cache_hits_total[5m])) / (sum by (cache) (rate(connectme_cache_hits_total[5m])) + sum by (cache) (rate(connectme_cache_misses_total[5m])))", "legendFormat": "{{cache}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}}
+    },
+
+    {
+      "type": "row",
+      "title": "RabbitMQ",
+      "id": 200,
+      "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Глубина очередей (ready)",
+      "id": 201,
+      "gridPos": {"x": 0, "y": 34, "w": 12, "h": 8},
+      "targets": [{"expr": "rabbitmq_queue_messages_ready", "legendFormat": "{{queue}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "DLQ depth",
+      "id": 202,
+      "gridPos": {"x": 12, "y": 34, "w": 12, "h": 8},
+      "targets": [{"expr": "rabbitmq_queue_messages_ready{queue=~\".*\\\\.dlq\"}", "legendFormat": "{{queue}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "MQ publish errors (backend)",
+      "id": 203,
+      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (op) (rate(connectme_mq_publish_errors_total[5m]))", "legendFormat": "{{op}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "MQ publish ok (backend)",
+      "id": 204,
+      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (op) (rate(connectme_mq_publish_ok_total[5m]))", "legendFormat": "{{op}}", "refId": "A"}]
+    },
+
+    {
+      "type": "row",
+      "title": "Bot",
+      "id": 300,
+      "gridPos": {"x": 0, "y": 50, "w": 24, "h": 1},
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Обновления бота (kind)",
+      "id": 301,
+      "gridPos": {"x": 0, "y": 51, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (kind) (rate(bot_messages_total[1m]) * 60)", "legendFormat": "{{kind}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Callbacks / min",
+      "id": 302,
+      "gridPos": {"x": 12, "y": 51, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(bot_callbacks_total[1m]) * 60", "legendFormat": "callbacks/min", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Доставка push'ей",
+      "id": 303,
+      "gridPos": {"x": 0, "y": 59, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "rate(bot_push_delivered_total[5m])", "legendFormat": "delivered", "refId": "A"},
+        {"expr": "rate(bot_push_failed_total[5m])", "legendFormat": "failed", "refId": "B"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ошибки API-клиента бота",
+      "id": 304,
+      "gridPos": {"x": 12, "y": 59, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (op) (rate(bot_api_errors_total[5m]))", "legendFormat": "{{op}}", "refId": "A"}]
     }
   ]
 }

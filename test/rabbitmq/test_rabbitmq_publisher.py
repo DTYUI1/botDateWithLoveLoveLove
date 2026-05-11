@@ -10,6 +10,7 @@
 import pytest
 import pytest_asyncio
 import json
+import os
 
 from infrastructure.rabbitmq.event_publisher import EventPublisher
 
@@ -21,7 +22,10 @@ from infrastructure.rabbitmq.event_publisher import EventPublisher
 @pytest_asyncio.fixture
 async def publisher():
     """Создать EventPublisher для тестов."""
-    pub = EventPublisher("amqp://guest:guest@localhost:5672//")
+    rabbitmq_url = os.environ.get("RABBITMQ_URL")
+    if not rabbitmq_url:
+        pytest.skip("RABBITMQ_URL не задан")
+    pub = EventPublisher(rabbitmq_url)
     try:
         await pub.connect()
         yield pub
@@ -91,8 +95,11 @@ async def test_publish_message_sent(publisher):
 @pytest.mark.asyncio
 async def test_context_manager():
     """Тест: использование как контекстный менеджер."""
+    rabbitmq_url = os.environ.get("RABBITMQ_URL")
+    if not rabbitmq_url:
+        pytest.skip("RABBITMQ_URL не задан")
     try:
-        async with EventPublisher("amqp://guest:guest@localhost:5672//") as pub:
+        async with EventPublisher(rabbitmq_url) as pub:
             assert pub.connection is not None
             await pub.publish_swipe_event(100, 200, "like")
         # После выхода из контекста соединение закрыто

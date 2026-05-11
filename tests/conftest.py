@@ -11,11 +11,10 @@ Conftest для тестирования Backend API ConnectMe.
 import os
 import sys
 import pytest
-from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Добавляем backend в path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -128,6 +127,12 @@ async def api_client():
     Для integration тестов нужен запущенный сервер.
     """
     from backend.main import app
+    from core.database import engine
+    from models.user import User
+
+    async with engine.begin() as conn:
+        await conn.run_sync(User.__table__.drop, checkfirst=True)
+        await conn.run_sync(User.__table__.create, checkfirst=True)
     
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),

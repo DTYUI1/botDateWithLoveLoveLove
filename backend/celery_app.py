@@ -15,7 +15,7 @@ from typing import Optional
 from celery import Celery
 from celery.schedules import crontab
 from loguru import logger
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 
 from core.config import settings
 from core.database import async_session_factory
@@ -43,6 +43,12 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
+    # imports — гарантирует, что worker увидит все task-модули.
+    imports=(
+        "tasks.rating_tasks",
+        "tasks.photo_tasks",
+        "tasks.notification_tasks",
+    ),
     beat_schedule={
         "recalculate-ratings-daily": {
             "task": "backend.recalculate_all_ratings",
@@ -114,7 +120,7 @@ async def _build_behavioral_stats(session, profile: Profile) -> dict:
 
 async def _recalculate_all_ratings(limit: Optional[int] = None) -> dict:
     async with async_session_factory() as session:
-        query = select(Profile).where(Profile.is_active == True).order_by(Profile.created_at.asc())
+        query = select(Profile).where(Profile.is_active.is_(True)).order_by(Profile.created_at.asc())
         if limit:
             query = query.limit(limit)
 

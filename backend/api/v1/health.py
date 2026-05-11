@@ -12,6 +12,8 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health_check():
     """Проверка работоспособности сервиса."""
+    from core.config import settings
+
     health_data = {
         "status": "ok",
         "service": "connectme-backend",
@@ -22,17 +24,20 @@ async def health_check():
     }
     
     # Проверяем Redis
-    try:
-        from core.redis_client import get_redis_client
-        redis_client = await get_redis_client()
-        redis_ok = await redis_client.health_check()
-        health_data["components"]["redis"] = "healthy" if redis_ok else "unhealthy"
-        if not redis_ok:
+    if not settings.redis_url:
+        health_data["components"]["redis"] = "disabled"
+    else:
+        try:
+            from core.redis_client import get_redis_client
+            redis_client = await get_redis_client()
+            redis_ok = await redis_client.health_check()
+            health_data["components"]["redis"] = "healthy" if redis_ok else "unhealthy"
+            if not redis_ok:
+                health_data["status"] = "degraded"
+        except Exception as e:
+            logger.warning(f"Health check Redis failed: {e}")
+            health_data["components"]["redis"] = "unhealthy"
             health_data["status"] = "degraded"
-    except Exception as e:
-        logger.warning(f"Health check Redis failed: {e}")
-        health_data["components"]["redis"] = "unhealthy"
-        health_data["status"] = "degraded"
     
     # Проверяем БД
     try:

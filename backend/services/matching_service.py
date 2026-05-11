@@ -12,9 +12,8 @@ import uuid
 from typing import List, Dict, Any, Optional
 from datetime import date
 
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from models.profile import Profile
 from models.user import User
@@ -22,7 +21,6 @@ from models.photo import Photo as PhotoModel
 from models.swipe import Swipe as SwipeModel
 from models.rating import RatingCombined as RatingCombinedModel
 from infrastructure.redis.cache_patterns import ProfileSessionCache
-from loguru import logger
 
 
 class MatchingService:
@@ -120,7 +118,7 @@ class MatchingService:
             .where(
                 and_(
                     Profile.id != my_profile.id,
-                    Profile.is_active == True,
+                    Profile.is_active.is_(True),
                     Profile.id.notin_(swiped_ids) if swiped_ids else True,
                     Profile.id.in_(profiles_with_photo),
                 )

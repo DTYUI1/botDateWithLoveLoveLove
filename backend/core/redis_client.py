@@ -50,7 +50,7 @@ class RedisClient:
         )
         # Проверить подключение с таймаутом
         try:
-            await self.redis.ping(timeout=3)
+            await self.redis.ping()
         except Exception:
             await self.disconnect()
             raise

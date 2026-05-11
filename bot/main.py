@@ -16,6 +16,7 @@ from loguru import logger
 from config import settings
 from api_client import APIClient
 from middlewares.auth import AuthMiddleware
+from metrics import start_metrics_server
 
 # Импорт роутеров
 from handlers.start import router as start_router
@@ -28,12 +29,26 @@ from handlers.photos import router as photos_router
 from handlers.common import router as common_router, fallback_router
 
 
+def _ctx_patcher(record):
+    """Собирает loguru extras в суффикс `| k=v` (telegram_id, fsm_state, …)."""
+    extras = record.get("extra") or {}
+    skip = {"ctx"}
+    parts = [f"{k}={v}" for k, v in extras.items() if k not in skip and v is not None]
+    record["extra"]["ctx"] = (" | " + " ".join(parts)) if parts else ""
+
+
 def setup_logging():
-    """Настройка логирования."""
+    """Настройка логирования с поддержкой `logger.bind(telegram_id=..., handler=...)`."""
     logger.remove()
+    logger.configure(patcher=_ctx_patcher)
     logger.add(
         sys.stdout,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan> - "
+            "<level>{message}</level>{extra[ctx]}"
+        ),
         level=settings.log_level,
     )
     logger.add(
@@ -42,6 +57,10 @@ def setup_logging():
         retention="30 days",
         level="DEBUG",
         encoding="utf-8",
+        format=(
+            "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
+            "{name}:{function} - {message}{extra[ctx]}"
+        ),
     )
 
 
@@ -80,6 +99,14 @@ async def main():
     setup_logging()
     logger.info("Запуск ConnectMe Bot...")
 
+    # /metrics endpoint для Prometheus
+    metrics_runner = None
+    try:
+        metrics_runner = await start_metrics_server(settings.metrics_host, settings.metrics_port)
+        logger.info(f"✅ /metrics endpoint на {settings.metrics_host}:{settings.metrics_port}")
+    except Exception as e:
+        logger.warning(f"⚠️ /metrics не поднялся: {type(e).__name__}: {e}")
+
     # Создаём API-клиент
     api_client = APIClient()
 
@@ -90,7 +117,6 @@ async def main():
         logger.info(f"Прокси для Telegram API: {proxy_url}")
 
     # Стандартная сессия с прокси — aiohttp корректно работает с Telegram
-    from aiogram.client.session.aiohttp import AiohttpSession
     session = AiohttpSession(proxy=proxy_url)
 
     # Создаём бота и диспетчер
@@ -131,6 +157,11 @@ async def main():
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
     finally:
+        if metrics_runner is not None:
+            try:
+                await metrics_runner.cleanup()
+            except Exception:
+                pass
         await on_shutdown(api_client)
 
 

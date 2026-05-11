@@ -4,7 +4,7 @@ API роутер для работы с рейтингами.
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from loguru import logger
 
 from core.database import get_db
@@ -13,7 +13,6 @@ from models.user import User
 from models.profile import Profile
 from models.rating import RatingCombined as RatingCombinedModel
 from schemas.rating import RatingResponse
-from services.profile_service import ProfileService
 
 router = APIRouter(prefix="/rating", tags=["rating"])
 

@@ -5,15 +5,15 @@ import asyncio
 import sys
 import os
 
-# Загрузка переменных окружения из .env
-from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
-
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.client.session.aiohttp import AiohttpSession
+from dotenv import load_dotenv
 from loguru import logger
+
+# Загрузка переменных окружения из .env
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Настройка логирования
 logger.remove()
