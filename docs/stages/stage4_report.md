@@ -1,8 +1,8 @@
 # Этап 4: Нагрузка, наблюдаемость, защита — Отчёт
 
 **Дата подготовки:** 2026-05-11
-**Статус:** 🟡 в работе (Auditor-замечания исправлены, выполнены verification
-и полный SLA-прогон нагрузки; финальный аудит и prod consumer-прогон отдельно)
+**Статус:** ✅ завершён (Auditor-замечания исправлены, выполнены mixed и
+endpoint-focused SLA-прогоны, prod consumer-прогон и финальный аудит)
 **Ветка:** `stage4`
 
 ---
@@ -17,7 +17,7 @@
 | Блок | Краткое содержание | Статус |
 |---|---|---|
 | 3.1 CI/CD | GitHub Actions: lint+tests+build+secret-scan, бейдж | ✅ |
-| 3.2 Нагрузка | Locust-сценарии, seed, verification/full SLA CSV | ✅ |
+| 3.2 Нагрузка | Locust-сценарии, seed, mixed + endpoint-focused SLA CSV, Grafana screenshot | ✅ |
 | 3.3 RabbitMQ consumer'ы | base_consumer + DLQ + swipe/match consumer'ы | ✅ |
 | 3.4 Celery расширение | rating/photo/notification tasks + триггеры из API | ✅ |
 | 3.5 Метрики | backend + bot `/metrics`, scrape, дашборд | ✅ |
@@ -27,7 +27,7 @@
 | 3.9 Топология MQ | декларация 1 раз + robust reconnect | ✅ |
 | 3.10 Логи | loguru ctx-patcher + helper'ы | 🟡 адопция инкрементальная |
 | Доп | `.gitignore` под фактическую структуру | ✅ |
-| Аудит А.1–А.4 | передаётся роли `auditor` | ⏳ |
+| Аудит А.1–А.4 | финальный аудит и таблица баллов | ✅ |
 
 ---
 
@@ -69,6 +69,11 @@
 - Stress-профиль выполнен: 100 users / 60s, 5756 requests, 0 failures,
   aggregate 97 RPS; p95 latency уже выше SLA, см.
   `docs/stages/stage4_loadtest.md`.
+- Endpoint-focused профиль выполнен:
+  `matching_next_focused` — 3018 requests, 0 failures, 51.07 RPS, p95=170 ms;
+  `matching_swipe_focused` — 3067 requests, 0 failures, 51.87 RPS, p95=81 ms.
+- Скриншот Grafana приложен:
+  `docs/stages/img/stage4_load_grafana.png`.
 
 ### Метрики и наблюдаемость (блок 3.5 DevOps-часть)
 
@@ -78,15 +83,38 @@
   расширен бизнес-панелями: свайпы/мин, мэтчи/мин, p95 swipe duration,
   cache hit ratio, глубина очередей RabbitMQ, отдельная панель для DLQ,
   активность бота, доставка push'ей, ошибки backend-publish.
+- Скриншоты Grafana по доменам (live-прогон 20 users / 120s
+  от 2026-05-12, подробности — `docs/stages/stage4_loadtest.md`,
+  раздел «Grafana panels»):
+  - `docs/stages/img/stage4_grafana_rps.png` — Requests per second по
+    endpoint'ам.
+  - `docs/stages/img/stage4_grafana_p95_latency.png` — p95 latency,
+    cold-start пик и установившийся участок.
+  - `docs/stages/img/stage4_grafana_5xx_error_rate.png` — 5xx error rate
+    (всплеск только на одном photo endpoint во время ручных тестов,
+    под Locust 5xx = 0).
+  - `docs/stages/img/stage4_grafana_business.png` — свайпы/мин,
+    мэтчи/мин, p95 swipe duration, Cache hit ratio (последняя пуста —
+    счётчики инкрементируются только при передаче `session_id`,
+    Locust такой режим не использует).
+  - `docs/stages/img/stage4_grafana_rabbitmq.png` — глубина очередей
+    (ready=1 стабильно), DLQ пуста, publish errors = 0, publish ok с
+    бизнес-всплеском swipe_event.
+  - `docs/stages/img/stage4_grafana_bot.png` — обновления бота,
+    callbacks/min, доставка push'ей, ошибки API-клиента.
 
 ### Consumer'ы как docker-сервисы (блок 3.3.5)
 
 В `docker-compose.prod.yml`:
 - `swipe_consumer` (backend image, команда `python -m workers.swipe_consumer`)
 - `match_consumer` (bot image, команда `python -m workers.match_consumer`)
-- На каждом `healthcheck: pgrep -f <name>` + `restart: always`.
+- На каждом `healthcheck` через Python-проверку `/proc` + `restart: always`
+  (slim images не содержат `pgrep`).
 - В RabbitMQ-сервисе примонтирован `definitions.json` для прелоада
   топологии (включая DLX и `.dlq`-очереди).
+- Стендовый запуск подтверждён в `docs/stages/stage4_consumer_run.md`:
+  оба consumer-сервиса `healthy`, `swipe_consumer` обрабатывает события
+  и триггерит точечный пересчёт рейтинга.
 
 ---
 
@@ -148,3 +176,5 @@
 - DevOps-отчёт: `promts/data/devops-report/devops-report.md`
 - CI workflow: `.github/workflows/ci.yml`
 - Дашборд: `infrastructure/grafana/provisioning/dashboards/connectme.json`
+- Финальный аудит: `promts/data/plan-fix/audit-final.md`
+- Доп. этап продукта (notification service): `docs/stages/stage_notification_service.md`

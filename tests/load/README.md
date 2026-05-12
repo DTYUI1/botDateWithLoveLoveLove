@@ -47,6 +47,50 @@ locust \
 | p95 `/matching/next` | < 250 ms |
 | p95 `/matching/swipe` | < 350 ms |
 | Error rate | < 1% |
+| Endpoint-focused throughput | >= 50 RPS на проверяемый endpoint |
+
+## Endpoint-focused профиль
+
+Mixed-сценарий проверяет пользовательский путь целиком, но из-за think-time и
+распределения задач не обязан давать 50 RPS на каждый endpoint. Для строгой
+проверки throughput используется отдельный профиль:
+
+```bash
+# Preseed: 800 candidate profiles + 120 requester profiles
+bash tests/load/seed.sh 800 120
+
+# Target для swipe-профиля можно взять из БД:
+docker compose exec -T db sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At \
+   -c "select id from profiles where gender = '\''female'\'' and city = '\''LoadCity'\'' limit 1;"'
+
+# /matching/next
+LOCUST_PRESEEDED_REQUESTERS=120 \
+LOCUST_RPS_PER_USER=2.05 \
+LOCUST_ENDPOINT=next locust \
+  -f tests/load/locustfile_endpoint.py \
+  --host http://localhost:8005 \
+  --users 25 \
+  --spawn-rate 50 \
+  --run-time 60s \
+  --headless \
+  --csv tests/load/results/endpoint_next \
+  --csv-full-history
+
+# /matching/swipe
+LOCUST_PRESEEDED_REQUESTERS=120 \
+LOCUST_TARGET_PROFILE_ID=<female_profile_uuid_from_seed> \
+LOCUST_RPS_PER_USER=2.6 \
+LOCUST_ENDPOINT=swipe locust \
+  -f tests/load/locustfile_endpoint.py \
+  --host http://localhost:8005 \
+  --users 20 \
+  --spawn-rate 50 \
+  --run-time 60s \
+  --headless \
+  --csv tests/load/results/endpoint_swipe \
+  --csv-full-history
+```
 
 ## CI
 

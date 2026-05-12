@@ -284,3 +284,24 @@ docker run --rm -v "$(pwd):/repo:ro" zricethezav/gitleaks:latest \
    массового рефакторинга, в горячих local-эндпойнтах.
 5. Перебить рабочие очереди RabbitMQ с новыми DLX-аргументами
    (одноразовая операция при апгрейде existing стенда).
+
+---
+
+## 8. Post-audit bugfix 2026-05-12
+
+**Баг:** match notification flow публиковал `match.created` дважды:
+1. напрямую из HTTP hot-path `/matching/swipe` через `safe_publish(..., op="match_event")`;
+2. повторно из Celery task `backend.send_match_push`, которую тот же endpoint
+   ставил при `is_match`.
+
+**Риск:** `bot/workers/match_consumer.py` мог получить два одинаковых
+`match.created` события и отправить два push-уведомления каждому участнику
+одного мэтча.
+
+**Фикс:** HTTP hot-path теперь публикует только `swipe.*`; единственный
+источник `match.created` — Celery task `backend.send_match_push`, после чего
+`match_consumer` доставляет push в Telegram. Это сохраняет требование Stage4
+по асинхронному notification-flow через Celery + RabbitMQ и убирает дубль.
+
+**Проверка:** добавлен regression-тест
+`tests/test_matching_notifications.py::test_swipe_event_publisher_does_not_duplicate_match_event`.

@@ -5,6 +5,7 @@
 set -euo pipefail
 
 COUNT="${1:-100}"
+REQUESTERS="${2:-0}"
 LOG_DIR="$(dirname "$0")/results"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/seed.log"
@@ -25,6 +26,8 @@ if [[ -z "${DATABASE_URL:-}" ]] && docker compose ps backend --status running >/
   fi
 fi
 
-echo "[seed] создаём $COUNT load-test кандидатов → $LOG_FILE"
-DEBUG=false PYTHONPATH=backend:. "$PYTHON_BIN" tests/load/seed_load_data.py --count "$COUNT" 2>&1 | tee "$LOG_FILE"
+echo "[seed] создаём $COUNT load-test кандидатов и $REQUESTERS requester-профилей → $LOG_FILE"
+DEBUG=false PYTHONPATH=backend:. "$PYTHON_BIN" tests/load/seed_load_data.py \
+  --count "$COUNT" \
+  --requesters "$REQUESTERS" 2>&1 | tee "$LOG_FILE"
 echo "[seed] готово ($(wc -l < "$LOG_FILE") строк в логе)"

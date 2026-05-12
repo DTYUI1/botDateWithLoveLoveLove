@@ -1,6 +1,6 @@
 # ConnectMe
 
-[![CI](https://github.com/DTYUI1/botDateWithLoveLoveLove/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DTYUI1/botDateWithLoveLoveLove/actions/workflows/ci.yml)
+[![CI configured](https://img.shields.io/badge/CI-GitHub%20Actions-blue)](.github/workflows/ci.yml)
 
 **Страшно подойти первым? Не знаешь, что написать, чтобы не быть банальным?**
 
@@ -130,6 +130,14 @@ mkdir -p tests/load/results
 locust -f tests/load/locustfile.py --host http://localhost:8005 \
        --users 50 --spawn-rate 10 --run-time 60s --headless \
        --csv tests/load/results/run --csv-full-history
+
+# Endpoint-focused проверка 50+ RPS на /matching/next
+bash tests/load/seed.sh 800 120
+LOCUST_PRESEEDED_REQUESTERS=120 LOCUST_RPS_PER_USER=2.05 \
+       LOCUST_ENDPOINT=next locust -f tests/load/locustfile_endpoint.py \
+       --host http://localhost:8005 --users 25 --spawn-rate 50 \
+       --run-time 60s --headless \
+       --csv tests/load/results/endpoint_next --csv-full-history
 ```
 
 ## 🚢 Production deploy

@@ -27,7 +27,7 @@
 | p95 `/matching/swipe` | ≤ 350 ms | внутренняя цель stage4 |
 | p99 любой endpoint | ≤ 1 s | разумный потолок |
 | Error rate (5xx) | < 1 % | внутренняя цель stage4 |
-| RPS на endpoint | ≥ 50 sustained | стартовый профиль |
+| RPS на endpoint | ≥ 50 sustained | endpoint-focused профиль |
 
 ---
 
@@ -96,6 +96,122 @@ bash tests/load/seed.sh 300
 Aggregate throughput — 68 RPS. При этом RPS на каждый matching endpoint
 получился около 28 RPS из-за wait-time и распределения сценария, поэтому цель
 `≥ 50 RPS на endpoint` требует отдельного endpoint-focused профиля или тюнинга.
+
+### Endpoint-focused SLA run 2026-05-11
+
+Для строгой проверки цели `≥ 50 RPS на endpoint` добавлен профиль
+`tests/load/locustfile_endpoint.py`. Setup вынесен из измеряемого пути:
+requester-профили сидятся заранее, а для `/matching/swipe` целевой profile id
+передаётся через `LOCUST_TARGET_PROFILE_ID`, чтобы тестировать именно endpoint,
+а не `/matching/next` перед ним.
+
+Подготовка:
+
+```bash
+bash tests/load/seed.sh 800 120
+```
+
+Команды:
+
+```bash
+LOCUST_PRESEEDED_REQUESTERS=120 LOCUST_RPS_PER_USER=2.05 \
+  LOCUST_ENDPOINT=next \
+  .venv/bin/python -m locust -f tests/load/locustfile_endpoint.py \
+  --host http://localhost:8005 --users 25 --spawn-rate 50 \
+  --run-time 60s --headless \
+  --csv tests/load/results/endpoint_next --csv-full-history
+
+LOCUST_PRESEEDED_REQUESTERS=120 \
+  LOCUST_TARGET_PROFILE_ID=a5375797-cd3e-4ce2-ad3e-295ca03f1dc5 \
+  LOCUST_RPS_PER_USER=2.6 LOCUST_ENDPOINT=swipe \
+  .venv/bin/python -m locust -f tests/load/locustfile_endpoint.py \
+  --host http://localhost:8005 --users 20 --spawn-rate 50 \
+  --run-time 60s --headless \
+  --csv tests/load/results/endpoint_swipe --csv-full-history
+```
+
+Артефакты:
+
+* `tests/load/results/endpoint_next_stats.csv`
+* `tests/load/results/endpoint_next_failures.csv`
+* `tests/load/results/endpoint_next_stats_history.csv`
+* `tests/load/results/endpoint_swipe_stats.csv`
+* `tests/load/results/endpoint_swipe_failures.csv`
+* `tests/load/results/endpoint_swipe_stats_history.csv`
+
+| Endpoint | Requests | RPS | p50 | p95 | p99 | error % |
+|---|---:|---:|---:|---:|---:|---:|
+| `matching_next_focused` | 3018 | 51.07 | 24 ms | 170 ms | 600 ms | 0.00 % |
+| `matching_swipe_focused` | 3067 | 51.87 | 38 ms | 81 ms | 190 ms | 0.00 % |
+
+Итог: endpoint-level SLA подтверждён для обоих critical matching endpoints:
+RPS выше 50, p95 ниже целевых 250/350 ms, 5xx нет.
+
+Скриншот Grafana во время финального стенда:
+
+![Grafana dashboard during Stage4 load](img/stage4_load_grafana.png)
+
+### Grafana panels (2026-05-12, дополнительный прогон 20 users / 120s)
+
+Чтобы видеть бизнес- и инфраструктурные панели отдельно от общего снимка
+выше, снят набор по доменам. Запуск: `bash tests/load/seed.sh 100` + Locust
+20 users / 120s, mixed-сценарий. Итог запуска: 1998 requests, 0 failures,
+aggregate 16.7 RPS, p95 21 ms.
+
+#### Запросы и латентность
+
+![Requests per second](img/stage4_grafana_rps.png)
+
+Что видим: пик ~12 RPS на `/api/v1/matching/next` под Locust, профильный
+endpoint `/api/v1/matching/swipe` ~0.7 RPS, фоновая активность `health`
+и auth/profile.
+
+![p95 latency](img/stage4_grafana_p95_latency.png)
+
+Что видим: все endpoints держатся ниже 100 ms на установившемся участке.
+Короткий cold-start пик до ~280 ms у `/api/v1/auth/telegram` (первый
+запрос после поднятия backend), потом сходит к норме.
+
+![5xx error rate](img/stage4_grafana_5xx_error_rate.png)
+
+Что видим: один локальный всплеск 5xx у `/api/v1/profile/photo/{photo_id}/raw`
+во время ручных проверок 22:30–22:40 (MinIO `NoSuchKey` на части моков —
+известный сценарий, починка в `reference_minio_resync`). На основном
+Locust-окне (23:15+) ошибок нет.
+
+#### Бизнес-метрики
+
+![Business metrics](img/stage4_grafana_business.png)
+
+Что видим: свайпы `like/pass/super_like` идут (до ~60/мин в пике), `matches/min`
+≈ 1.25 во время ручных тестов, `p95 swipe duration` стабильно < 25 ms.
+Панель «Cache hit ratio» отображает `No data` — счётчики
+`connectme_cache_hits_total` / `connectme_cache_misses_total` объявлены в
+`backend/core/metrics.py`, но инкрементируются только при передаче
+`session_id` в `/matching/next` (см. `backend/api/v1/matching.py:55`). В
+текущем Locust-сценарии `session_id` не передаётся, поэтому 0/0 → панель
+пустая. Это не bug дашборда, а ограничение инструментации — фикс
+тривиальный (инкрементить hit/miss в общем code path matching_service).
+
+#### RabbitMQ
+
+![RabbitMQ panels](img/stage4_grafana_rabbitmq.png)
+
+Что видим: «Глубина очередей (ready)» — стабильно 1 (нет накопления,
+consumer успевает разбирать), «DLQ depth» — `No data` (DLQ пуста, ожидаемо
+для healthy-run), «MQ publish errors» — `No data` (за весь прогон 0
+ошибок публикации), «MQ publish ok» — всплеск `swipe_event` во время
+ручной фазы и под Locust.
+
+#### Bot
+
+![Bot panels](img/stage4_grafana_bot.png)
+
+Что видим: «Обновления бота (kind)» и «Callbacks/min» — burst во время
+ручной фазы 22:30–22:35 (тесты бота из реального чата). «Доставка push'ей»
+пуста — мэтчей именно во время Locust-окна не было (Locust-аккаунты
+свайпают чужие профили в одну сторону). «Ошибки API-клиента бота» —
+короткий всплеск `fetch_photo_bytes` на тех же 502-x от MinIO.
 
 ### Stress run 2026-05-11
 
@@ -182,9 +298,8 @@ Locust автоматически при `--csv-full-history`).
 
 ## 8. Следующие шаги
 
-1. Снять скриншот дашборда Grafana во время следующего полного прогона и положить рядом
-   с CSV.
-2. Поднять prod consumer-сервисы во время нагрузки, если нужно проверять
-   фактическое draining очереди `swipe_processing`.
-3. Отдельно прогнать endpoint-focused профиль без think-time, если нужно
-   строго подтвердить `≥ 50 RPS` на каждом matching endpoint.
+1. Для дальнейшего запаса по нагрузке поднять лимит PostgreSQL connections или
+   добавить PgBouncer: aggressive setup через `/matching/next` на 80+ RPS
+   упирался в `TooManyConnectionsError`.
+2. Вынести target/preseed параметры endpoint-focused профиля в make-команды,
+   если эти прогоны будут регулярно повторяться.

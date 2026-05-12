@@ -1,5 +1,9 @@
 """
 Обработчики для управления настройками поиска.
+
+UX-правило: callback `settings` редактирует текущий экран,
+а успешные изменения возвращают пользователя на обновлённый экран
+настроек, а не плодят отдельные success-сообщения.
 """
 
 from aiogram import Router, F
@@ -12,6 +16,7 @@ from keyboards.inline import (
 )
 from states import SearchStates
 from api_client import APIClient
+from utils.message_editor import edit_or_answer, safe_delete
 
 router = Router()
 
@@ -38,38 +43,49 @@ def render_settings_text(settings_data: dict) -> str:
     )
 
 
-@router.message(F.text == "/settings")
-async def cmd_settings(message: Message, api_client: APIClient):
-    """Показать текущие настройки."""
-    telegram_id = message.from_user.id
-    logger.info(f"[Bot Settings] /settings от user_id={telegram_id}")
-
-    # Проверяем, есть ли профиль
-    profile = await api_client.get_profile(telegram_id)
-    if not profile:
-        await message.answer(
-            "📝 Сначала создай анкету! Нажми /start чтобы начать."
-        )
-        return
-
+async def _send_settings_screen(message: Message, api_client: APIClient, telegram_id: int) -> None:
+    """Отправить новое сообщение со снимком настроек (для команд)."""
     try:
-        # Получаем настройки
         settings_data = await api_client.get_settings(telegram_id)
-
         if not settings_data:
             await message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
             return
-
         await message.answer(render_settings_text(settings_data))
-
     except Exception as e:
         logger.error(f"[Bot Settings] Ошибка получения настроек: {e}")
         await message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
 
 
+async def _edit_settings_screen(message: Message, api_client: APIClient, telegram_id: int) -> None:
+    """Заменить текущий экран на обновлённые настройки."""
+    try:
+        settings_data = await api_client.get_settings(telegram_id)
+        if not settings_data:
+            await edit_or_answer(message, "❌ Не удалось загрузить настройки. Попробуй позже.")
+            return
+        await edit_or_answer(message, render_settings_text(settings_data))
+    except Exception as e:
+        logger.error(f"[Bot Settings] Ошибка получения настроек: {e}")
+        await edit_or_answer(message, "❌ Не удалось загрузить настройки. Попробуй позже.")
+
+
+@router.message(F.text == "/settings")
+async def cmd_settings(message: Message, api_client: APIClient):
+    """Показать текущие настройки (команда — новый экран)."""
+    telegram_id = message.from_user.id
+    logger.info(f"[Bot Settings] /settings от user_id={telegram_id}")
+
+    profile = await api_client.get_profile(telegram_id)
+    if not profile:
+        await message.answer("📝 Сначала создай анкету! Нажми /start чтобы начать.")
+        return
+
+    await _send_settings_screen(message, api_client, telegram_id)
+
+
 @router.callback_query(F.data == "settings")
 async def cb_settings(callback: CallbackQuery, api_client: APIClient):
-    """Открыть настройки из inline-кнопки профиля."""
+    """Открыть настройки из inline-кнопки профиля — редактируем экран."""
     await callback.answer()
 
     telegram_id = callback.from_user.id
@@ -77,23 +93,13 @@ async def cb_settings(callback: CallbackQuery, api_client: APIClient):
 
     profile = await api_client.get_profile(telegram_id)
     if not profile:
-        await callback.message.answer(
-            "📝 Сначала создай анкету! Нажми /start чтобы начать."
+        await edit_or_answer(
+            callback.message,
+            "📝 Сначала создай анкету! Нажми /start чтобы начать.",
         )
         return
 
-    try:
-        settings_data = await api_client.get_settings(telegram_id)
-
-        if not settings_data:
-            await callback.message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
-            return
-
-        await callback.message.answer(render_settings_text(settings_data))
-
-    except Exception as e:
-        logger.error(f"[Bot Settings] Ошибка получения настроек из callback: {e}")
-        await callback.message.answer("❌ Не удалось загрузить настройки. Попробуй позже.")
+    await _edit_settings_screen(callback.message, api_client, telegram_id)
 
 
 @router.message(F.text == "/settings_age")
@@ -117,6 +123,7 @@ async def process_age_min(message: Message, state: FSMContext, api_client: APICl
         await state.update_data(age_range_min=age_min)
         await message.answer("🎂 Введи максимальный возраст:")
         await state.set_state(SearchStates.editing_age_range_max)
+        await safe_delete(message)
 
     except ValueError:
         await message.answer("❌ Введи число. Попробуй ещё раз:")
@@ -144,8 +151,10 @@ async def process_age_max(message: Message, state: FSMContext, api_client: APICl
             "age_range_max": age_max,
         })
 
-        await message.answer(f"✅ Диапазон возраста установлен: {age_min}-{age_max} лет")
         await state.clear()
+        await safe_delete(message)
+        # Вместо отдельного success-сообщения — сразу обновлённый экран настроек
+        await _send_settings_screen(message, api_client, telegram_id)
 
     except ValueError:
         await message.answer("❌ Введи число. Попробуй ещё раз:")
@@ -174,8 +183,9 @@ async def process_distance(message: Message, state: FSMContext, api_client: APIC
             "distance_max_km": distance,
         })
 
-        await message.answer(f"✅ Максимальное расстояние: {distance} км")
         await state.clear()
+        await safe_delete(message)
+        await _send_settings_screen(message, api_client, telegram_id)
 
     except ValueError:
         await message.answer("❌ Введи число. Попробуй ещё раз:")
@@ -200,7 +210,7 @@ async def process_looking_for_settings(
     state: FSMContext,
     api_client: APIClient,
 ):
-    """Обработка выбора ориентации в настройках."""
+    """Обработка выбора ориентации в настройках — возвращаем обновлённый экран."""
     looking_for = callback.data.replace("looking_", "")
     telegram_id = callback.from_user.id
 
@@ -208,14 +218,6 @@ async def process_looking_for_settings(
         "looking_for": looking_for,
     })
 
-    looking_for_map = {
-        "male": "Парней",
-        "female": "Девушек",
-        "both": "Всех",
-    }
-
-    await callback.message.edit_text(
-        f"✅ Теперь ты ищешь: {looking_for_map.get(looking_for, looking_for)}"
-    )
     await state.clear()
     await callback.answer()
+    await _edit_settings_screen(callback.message, api_client, telegram_id)

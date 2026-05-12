@@ -18,6 +18,7 @@ from keyboards.inline import (
 from states import ProfileStates
 from api_client import APIClient
 from utils.formatters import format_own_profile, GENDER_RU, LOOKING_FOR_RU
+from utils.message_editor import edit_or_answer, safe_delete
 
 router = Router()
 
@@ -28,6 +29,60 @@ AGE_PATTERN = re.compile(r"^(1[89]|[2-9]\d)$")
 def render_profile_text(profile: dict) -> str:
     """Собирает текст профиля для message/callback-сценариев."""
     return format_own_profile(profile)
+
+
+async def _send_profile_screen(
+    message: Message,
+    api_client: APIClient,
+    telegram_id: int,
+) -> None:
+    """Отправить новое сообщение с актуальным профилем (после FSM-text шагов)."""
+    try:
+        profile = await api_client.get_profile(telegram_id)
+    except Exception as e:
+        logger.error(f"[Profile] Ошибка получения профиля: {e}")
+        await message.answer("❌ Не удалось открыть профиль. Попробуй позже.")
+        return
+
+    if not profile:
+        await message.answer(
+            "📝 У тебя ещё нет анкеты. Давай создадим её!\n"
+            "Нажми /start чтобы начать.",
+        )
+        return
+
+    await message.answer(
+        render_profile_text(profile),
+        reply_markup=profile_menu_keyboard(),
+    )
+
+
+async def _edit_profile_screen(
+    message: Message,
+    api_client: APIClient,
+    telegram_id: int,
+) -> None:
+    """Заменить текущий экран на актуальный профиль (для callback-ответов)."""
+    try:
+        profile = await api_client.get_profile(telegram_id)
+    except Exception as e:
+        logger.error(f"[Profile] Ошибка получения профиля: {e}")
+        await edit_or_answer(message, "❌ Не удалось открыть профиль. Попробуй позже.")
+        return
+
+    if not profile:
+        await edit_or_answer(
+            message,
+            "📝 У тебя ещё нет анкеты. Давай создадим её!\n"
+            "Нажми /start чтобы начать.",
+        )
+        return
+
+    await edit_or_answer(
+        message,
+        render_profile_text(profile),
+        reply_markup=profile_menu_keyboard(),
+    )
 
 
 # ============================================
@@ -48,6 +103,7 @@ async def process_name(message: Message, state: FSMContext):
         "🎂 Сколько тебе лет? (введи число от 18 до 99):"
     )
     await state.set_state(ProfileStates.waiting_for_age)
+    await safe_delete(message)
 
 
 @router.message(ProfileStates.waiting_for_age)
@@ -65,6 +121,7 @@ async def process_age(message: Message, state: FSMContext):
         reply_markup=gender_keyboard(),
     )
     await state.set_state(ProfileStates.waiting_for_gender)
+    await safe_delete(message)
 
 
 @router.callback_query(F.data.startswith("gender_"), ProfileStates.waiting_for_gender)
@@ -96,6 +153,7 @@ async def process_bio(message: Message, state: FSMContext):
         "Например: музыка, кино, спорт, путешествия, программирование:"
     )
     await state.set_state(ProfileStates.waiting_for_interests)
+    await safe_delete(message)
 
 
 @router.message(ProfileStates.waiting_for_interests)
@@ -113,6 +171,7 @@ async def process_interests(message: Message, state: FSMContext):
         "📍 В каком городе ты находишься?"
     )
     await state.set_state(ProfileStates.waiting_for_city)
+    await safe_delete(message)
 
 
 @router.message(ProfileStates.waiting_for_city)
@@ -129,6 +188,7 @@ async def process_city(message: Message, state: FSMContext):
         reply_markup=looking_for_keyboard(),
     )
     await state.set_state(ProfileStates.waiting_for_looking_for)
+    await safe_delete(message)
 
 
 @router.callback_query(F.data.startswith("looking_"), ProfileStates.waiting_for_looking_for)
@@ -158,7 +218,8 @@ async def process_looking_for(callback: CallbackQuery, state: FSMContext, api_cl
         # Создаём профиль через API
         await api_client.create_profile(telegram_id, profile_data)
 
-        await callback.message.answer(
+        await edit_or_answer(
+            callback.message,
             "🎉 Анкета создана!\n\n"
             "Теперь ты можешь:\n"
             "• Начать поиск анкет\n"
@@ -168,8 +229,9 @@ async def process_looking_for(callback: CallbackQuery, state: FSMContext, api_cl
         )
     except Exception as e:
         logger.error(f"Ошибка создания профиля: {e}")
-        await callback.message.answer(
-            "❌ Произошла ошибка при создании профиля. Попробуй позже."
+        await edit_or_answer(
+            callback.message,
+            "❌ Произошла ошибка при создании профиля. Попробуй позже.",
         )
 
     await state.clear()
@@ -204,31 +266,14 @@ async def cmd_profile(message: Message, state: FSMContext, api_client: APIClient
 async def cb_back_to_profile(callback: CallbackQuery, api_client: APIClient):
     """Вернуть пользователя к актуальному экрану профиля."""
     await callback.answer()
-
-    telegram_id = callback.from_user.id
-    try:
-        profile = await api_client.get_profile(telegram_id)
-
-        if not profile:
-            await callback.message.edit_text(
-                "📝 У тебя ещё нет анкеты. Давай создадим её!\n"
-                "Нажми /start чтобы начать.",
-            )
-            return
-
-        await callback.message.edit_text(
-            render_profile_text(profile),
-            reply_markup=profile_menu_keyboard(),
-        )
-    except Exception as e:
-        logger.error(f"[Profile] Ошибка возврата к профилю: {e}")
-        await callback.message.answer("❌ Не удалось открыть профиль. Попробуй позже.")
+    await _edit_profile_screen(callback.message, api_client, callback.from_user.id)
 
 
 @router.callback_query(F.data == "edit_profile")
 async def cb_edit_profile(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования профиля."""
-    await callback.message.edit_text(
+    await edit_or_answer(
+        callback.message,
         "✏️ Что хочешь изменить?",
         reply_markup=edit_profile_keyboard(),
     )
@@ -238,7 +283,7 @@ async def cb_edit_profile(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "edit_name")
 async def cb_edit_name(callback: CallbackQuery, state: FSMContext):
     """Редактирование имени."""
-    await callback.message.edit_text("👤 Введи новое имя:")
+    await edit_or_answer(callback.message, "👤 Введи новое имя:")
     await state.set_state(ProfileStates.editing_name)
     await callback.answer()
 
@@ -254,14 +299,15 @@ async def process_edit_name(message: Message, state: FSMContext, api_client: API
     telegram_id = message.from_user.id
     await api_client.update_profile(telegram_id, {"display_name": name})
 
-    await message.answer("✅ Имя обновлено!", reply_markup=profile_menu_keyboard())
     await state.clear()
+    await safe_delete(message)
+    await _send_profile_screen(message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "edit_age")
 async def cb_edit_age(callback: CallbackQuery, state: FSMContext):
     """Редактирование возраста."""
-    await callback.message.edit_text("🎂 Введи новый возраст (от 18 до 99):")
+    await edit_or_answer(callback.message, "🎂 Введи новый возраст (от 18 до 99):")
     await state.set_state(ProfileStates.editing_age)
     await callback.answer()
 
@@ -278,14 +324,16 @@ async def process_edit_age(message: Message, state: FSMContext, api_client: APIC
     telegram_id = message.from_user.id
     await api_client.update_profile(telegram_id, {"age": int(age_text)})
 
-    await message.answer("✅ Возраст обновлён!", reply_markup=profile_menu_keyboard())
     await state.clear()
+    await safe_delete(message)
+    await _send_profile_screen(message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "edit_gender")
 async def cb_edit_gender(callback: CallbackQuery, state: FSMContext):
     """Редактирование пола."""
-    await callback.message.edit_text(
+    await edit_or_answer(
+        callback.message,
         "⚧ Укажи свой пол:",
         reply_markup=gender_keyboard(),
     )
@@ -300,18 +348,16 @@ async def process_edit_gender(callback: CallbackQuery, state: FSMContext, api_cl
     telegram_id = callback.from_user.id
     await api_client.update_profile(telegram_id, {"gender": gender})
 
-    await callback.message.edit_text(
-        f"✅ Пол обновлён: {GENDER_RU.get(gender, gender)}",
-        reply_markup=profile_menu_keyboard(),
-    )
     await state.clear()
-    await callback.answer()
+    await callback.answer(f"Пол: {GENDER_RU.get(gender, gender)}")
+    await _edit_profile_screen(callback.message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "edit_looking_for")
 async def cb_edit_looking_for(callback: CallbackQuery, state: FSMContext):
     """Редактирование предпочтений поиска."""
-    await callback.message.edit_text(
+    await edit_or_answer(
+        callback.message,
         "💕 Кого ты ищешь?",
         reply_markup=looking_for_keyboard(),
     )
@@ -326,18 +372,15 @@ async def process_edit_looking_for(callback: CallbackQuery, state: FSMContext, a
     telegram_id = callback.from_user.id
     await api_client.update_profile(telegram_id, {"looking_for": looking_for})
 
-    await callback.message.edit_text(
-        f"✅ Теперь ты ищешь: {LOOKING_FOR_RU.get(looking_for, looking_for)}",
-        reply_markup=profile_menu_keyboard(),
-    )
     await state.clear()
-    await callback.answer()
+    await callback.answer(f"Ищешь: {LOOKING_FOR_RU.get(looking_for, looking_for)}")
+    await _edit_profile_screen(callback.message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "edit_bio")
 async def cb_edit_bio(callback: CallbackQuery, state: FSMContext):
     """Редактирование описания."""
-    await callback.message.edit_text("📝 Введи новое описание о себе:")
+    await edit_or_answer(callback.message, "📝 Введи новое описание о себе:")
     await state.set_state(ProfileStates.editing_bio)
     await callback.answer()
 
@@ -353,14 +396,15 @@ async def process_edit_bio(message: Message, state: FSMContext, api_client: APIC
     telegram_id = message.from_user.id
     await api_client.update_profile(telegram_id, {"bio": bio})
 
-    await message.answer("✅ Описание обновлено!", reply_markup=profile_menu_keyboard())
     await state.clear()
+    await safe_delete(message)
+    await _send_profile_screen(message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "edit_city")
 async def cb_edit_city(callback: CallbackQuery, state: FSMContext):
     """Редактирование города."""
-    await callback.message.edit_text("📍 Введи новый город:")
+    await edit_or_answer(callback.message, "📍 Введи новый город:")
     await state.set_state(ProfileStates.editing_city)
     await callback.answer()
 
@@ -376,16 +420,18 @@ async def process_edit_city(message: Message, state: FSMContext, api_client: API
     telegram_id = message.from_user.id
     await api_client.update_profile(telegram_id, {"city": city})
 
-    await message.answer("✅ Город обновлен!", reply_markup=profile_menu_keyboard())
     await state.clear()
+    await safe_delete(message)
+    await _send_profile_screen(message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "edit_interests")
 async def cb_edit_interests(callback: CallbackQuery, state: FSMContext):
     """Редактирование интересов."""
-    await callback.message.edit_text(
+    await edit_or_answer(
+        callback.message,
         "🎯 Введи новые интересы через запятую:\n"
-        "Например: музыка, кино, спорт, путешествия"
+        "Например: музыка, кино, спорт, путешествия",
     )
     await state.set_state(ProfileStates.editing_interests)
     await callback.answer()
@@ -404,16 +450,14 @@ async def process_edit_interests(message: Message, state: FSMContext, api_client
     telegram_id = message.from_user.id
     await api_client.update_profile(telegram_id, {"interests": interests})
 
-    await message.answer("✅ Интересы обновлены!", reply_markup=profile_menu_keyboard())
     await state.clear()
+    await safe_delete(message)
+    await _send_profile_screen(message, api_client, telegram_id)
 
 
 @router.callback_query(F.data == "profile_done")
-async def cb_profile_done(callback: CallbackQuery, state: FSMContext):
-    """Завершение редактирования."""
-    await callback.message.edit_text(
-        "✅ Профиль обновлён!",
-        reply_markup=profile_menu_keyboard(),
-    )
+async def cb_profile_done(callback: CallbackQuery, state: FSMContext, api_client: APIClient):
+    """Завершение редактирования — возвращаемся к экрану профиля."""
     await state.clear()
-    await callback.answer()
+    await callback.answer("✅ Профиль обновлён")
+    await _edit_profile_screen(callback.message, api_client, callback.from_user.id)

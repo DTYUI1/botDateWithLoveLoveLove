@@ -29,25 +29,29 @@
 - `.venv/bin/python -m locust ... --users 5 --run-time 30s` — 213 requests, 0 failures по CSV.
 - `.venv/bin/python -m locust ... --users 50 --run-time 60s` — 4019 requests, 0 failures, aggregate 68 RPS по CSV.
 - `.venv/bin/python -m locust ... --users 100 --run-time 60s` — 5756 requests, 0 failures, aggregate 97 RPS, но p95 выше SLA.
+- `LOCUST_ENDPOINT=next ... locustfile_endpoint.py ...` — 3018 requests, 0 failures, 51.07 RPS, p95=170 ms.
+- `LOCUST_ENDPOINT=swipe ... locustfile_endpoint.py ...` — 3067 requests, 0 failures, 51.87 RPS, p95=81 ms.
+- `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps ...` — backend/RabbitMQ/Grafana/Prometheus и оба consumer'а healthy/up.
+- Headless Chromium screenshot Grafana — `docs/stages/img/stage4_load_grafana.png`.
 - `docker run --rm -v "$(pwd):/repo:ro" zricethezav/gitleaks:latest detect --source /repo --redact` — no leaks found.
 - `git diff --check` — проходит.
 
 ### Главные выводы
 
 - Быстрые CI-блокеры исправлены: `ruff` и `pytest` зелёные в локальном CI-env.
-- Нагрузочный отчёт больше не содержит `TBD`: выполнены verification-run
-  5 users / 30s и полный SLA-run 50 users / 60s, CSV-артефакты сохранены в
-  `tests/load/results/`.
-- Дополнительный 100-user stress-run показал границу: без 5xx, но p95/p99
-  уже выше SLA, поэтому endpoint-level 50 RPS требует отдельного профиля или
-  тюнинга.
+- Нагрузочный отчёт больше не содержит `TBD`: выполнены verification-run,
+  full mixed run, stress-run и endpoint-focused SLA run; CSV-артефакты
+  сохранены в `tests/load/results/`.
+- Endpoint-level 50 RPS подтверждён отдельным профилем:
+  `/matching/next` — 51.07 RPS, p95=170 ms; `/matching/swipe` — 51.87 RPS,
+  p95=81 ms; failures=0.
 - Исправлены функциональные замечания аудитора: consumer retry инкрементит
   `x-retries`, добавлен endpoint `/api/v1/profile/{id}/telegram_id`,
   `process_photo` выполняет Pillow-валидацию и thumbnail, backend/bot метрики
   реально инкрементируются.
 - Repo-wide secret hygiene подтверждён gitleaks git-scan: leaks не найдено.
-- Осталось не завышать статус: prod consumer healthcheck/drain, screenshot
-  Grafana и финальный аудит пока не выполнены.
+- Prod consumer healthcheck/drain подтверждён стендово; screenshot Grafana
+  приложен; финальный аудит создан.
 
 ---
 
@@ -71,13 +75,13 @@
 | 3.2.1 | Согласовать с PM формат теста (JMeter / альтернатива) | DevOps + PM | 🟡 | Выбран Locust, но явного подтверждения PM в репозитории нет |
 | 3.2.2 | Подготовить данные (засидить БД) | DevOps | ✅ | `tests/load/seed.sh`, `tests/load/seed_load_data.py`, `tests/load/results/seed.log` |
 | 3.2.3 | План-сценарии для критичных endpoints (auth / matching/next / swipe) | DevOps | ✅ | `tests/load/locustfile.py` |
-| 3.2.4 | Прогон + сохранение результатов | DevOps | ✅ | Выполнены verification 5 users / 30s и full SLA 50 users / 60s; CSV в `tests/load/results/*_stats.csv` |
-| 3.2.5 | Отчёт с графиками, p95, узкими местами | DevOps | 🟡 | `docs/stages/stage4_loadtest.md` заполнен p95/p99 из CSV, включая 100-user stress bottleneck; Grafana screenshot ещё нужен |
+| 3.2.4 | Прогон + сохранение результатов | DevOps | ✅ | Выполнены verification, mixed full/stress и endpoint-focused runs; CSV в `tests/load/results/*_stats.csv` |
+| 3.2.5 | Отчёт с графиками, p95, узкими местами | DevOps | ✅ | `docs/stages/stage4_loadtest.md`, `docs/stages/img/stage4_load_grafana.png`; p95/p99 из CSV, включая bottleneck `TooManyConnectionsError` при aggressive setup |
 | 3.2.6 | Инструкция запуска в README | DevOps | ✅ | `README.md`, `tests/load/README.md` |
 
-**Приёмка:** почти закрыта. Verification/full/stress CSV есть; для защиты
-нужен screenshot Grafana и решение, нужен ли отдельный endpoint-focused RPS
-профиль.
+**Приёмка:** закрыта по DevOps-части. Verification/full/stress CSV есть,
+endpoint-focused RPS-профиль подтверждает 50+ RPS на обоих matching endpoints;
+Locust как замена JMeter остаётся PM-зависимым пунктом.
 
 ---
 
@@ -89,10 +93,10 @@
 | 3.3.2 | DLQ для рабочих очередей | Queue/Cache | ✅ | `infrastructure/rabbitmq/definitions.json` |
 | 3.3.3 | Consumer уведомлений о мэтчах в боте | Bot | ✅ | `bot/workers/match_consumer.py`, `backend/api/v1/profile.py`; endpoint `/api/v1/profile/{id}/telegram_id` добавлен, push metrics подключены |
 | 3.3.4 | Consumer событий свайпов в backend (триггер пересчёта рейтинга) | Backend | ✅ | `backend/workers/swipe_consumer.py` |
-| 3.3.5 | Запуск consumer'ов как отдельных docker-сервисов + healthcheck | DevOps | 🟡 | `docker-compose.prod.yml`; сервисы есть только в prod overlay, нужен стендовый запуск и проверка `docker compose ps/logs` |
+| 3.3.5 | Запуск consumer'ов как отдельных docker-сервисов + healthcheck | DevOps | ✅ | `docker-compose.prod.yml`, `docs/stages/stage4_consumer_run.md`; `swipe_consumer` и `match_consumer` подняты стендово и healthy |
 
-**Приёмка:** частично. Кодовые замечания закрыты; осталось поднять base+prod
-стек и подтвердить healthcheck отдельных consumer-сервисов.
+**Приёмка:** закрыта. Кодовые замечания закрыты; base+prod стек поднят,
+healthcheck отдельных consumer-сервисов подтверждён.
 
 ---
 
@@ -129,11 +133,11 @@
 |---|--------|-------------|--------|----------|
 | 3.6.1 | Скелет отчёта по аналогии со stage1–3 | DevOps | ✅ | `docs/stages/stage4_report.md` |
 | 3.6.2 | Разделы по своей зоне ответственности | Backend / Bot / Queue-Cache | ✅ | `docs/stages/stage4_report.md` обновлён без TODO по исправленным Auditor-пунктам |
-| 3.6.3 | Раздел про CI/CD, нагрузку, мониторинг | DevOps | 🟡 | Разделы обновлены фактическими результатами; полный SLA-профиль ещё нужен |
+| 3.6.3 | Раздел про CI/CD, нагрузку, мониторинг | DevOps | ✅ | `docs/stages/stage4_report.md`; добавлены endpoint-focused SLA, Grafana screenshot и consumer runtime check |
 | 3.6.4 | Сверка `tracking_table.md` с фактическим состоянием | DevOps | ✅ | `tracking_table.md` больше не заявляет полный load SLA, указан малый прогон и остаток |
 
-**Приёмка:** частично. Документ обновлён фактическими результатами; полный
-SLA-профиль и финальный аудит ещё нужны.
+**Приёмка:** закрыта. Документ обновлён фактическими результатами; финальный
+аудит создан.
 
 ---
 
@@ -200,11 +204,12 @@ SLA-профиль и финальный аудит ещё нужны.
 | № | Задача | Исполнитель | Статус | Артефакт |
 |---|--------|-------------|--------|----------|
 | А.1 | Повторный аудит после быстрых фиксов (Фаза 1) | Auditor | ✅ | Этот файл: `promts/data/plan-fix/tracking-fix.md` |
-| А.2 | Повторный аудит после функциональных фиксов (Фаза 2) | Auditor | ⬜ | `audit-round-3.md` |
-| А.3 | Финальный аудит после нагрузки и отчёта (Фаза 3) | Auditor | ⬜ | `audit-final.md` |
-| А.4 | Таблица «требование -> балл до/после» | Auditor | ⬜ | `audit-final.md` |
+| А.2 | Повторный аудит после функциональных фиксов (Фаза 2) | Auditor | ✅ | `promts/data/plan-fix/audit-round-3.md` |
+| А.3 | Финальный аудит после нагрузки и отчёта (Фаза 3) | Auditor | ✅ | `promts/data/plan-fix/audit-final.md` |
+| А.4 | Таблица «требование -> балл до/после» | Auditor | ✅ | `promts/data/plan-fix/audit-final.md` |
 
-**Приёмка:** А.1 закрыт, финальная аудиторская часть ждёт исправления найденных замечаний и реального нагрузочного прогона.
+**Приёмка:** закрыта; финальный аудит фиксирует ожидаемый результат 30+ баллов
+при зачёте notification-сервиса как дополнительного этапа.
 
 ---
 
@@ -213,44 +218,44 @@ SLA-профиль и финальный аудит ещё нужны.
 | Блок | Задач | Готово | Частично | Нужно доработать/заблокировано | В очереди |
 |------|------:|------:|---------:|-------------------------------:|----------:|
 | 3.1 CI/CD | 4 | 4 | 0 | 0 | 0 |
-| 3.2 Нагрузка | 6 | 4 | 2 | 0 | 0 |
-| 3.3 Consumer'ы | 5 | 4 | 1 | 0 | 0 |
+| 3.2 Нагрузка | 6 | 5 | 1 | 0 | 0 |
+| 3.3 Consumer'ы | 5 | 5 | 0 | 0 | 0 |
 | 3.4 Celery | 4 | 4 | 0 | 0 | 0 |
 | 3.5 Метрики | 4 | 4 | 0 | 0 | 0 |
-| 3.6 Отчёт | 4 | 3 | 1 | 0 | 0 |
+| 3.6 Отчёт | 4 | 4 | 0 | 0 | 0 |
 | 3.7 Compose secrets | 4 | 4 | 0 | 0 | 0 |
 | 3.8 Singleton | 3 | 3 | 0 | 0 | 0 |
 | 3.9 Топология MQ | 2 | 2 | 0 | 0 | 0 |
 | 3.10 Логи | 2 | 0 | 2 | 0 | 0 |
 | Доп | 2 | 2 | 0 | 0 | 0 |
-| Аудит | 4 | 1 | 0 | 0 | 3 |
-| **Итого** | **44** | **35** | **6** | **0** | **3** |
+| Аудит | 4 | 4 | 0 | 0 | 0 |
+| **Итого** | **44** | **41** | **3** | **0** | **0** |
 
 | Метрика | Значение |
 |---------|----------|
 | Всего задач | 44 |
-| Выполнено | 35 |
-| Частично выполнено | 6 |
+| Выполнено | 41 |
+| Частично выполнено | 3 |
 | Нужно доработать/заблокировано | 0 |
 | В очереди | 3 |
-| Прогресс по полностью закрытым задачам | **80 %** |
+| Прогресс по полностью закрытым задачам | **93 %** |
 
 ---
 
 ## Финальные критерии готовности этапа 4
 
 - [x] CI зелёный локально — `ruff` проходит, `pytest` 67 passed.
-- [x] План и отчёт по нагрузке заполнены verification/full SLA run.
-- [x] RabbitMQ topology/DLQ видны на стенде; prod consumer healthcheck требует отдельного base+prod запуска.
+- [x] План и отчёт по нагрузке заполнены verification/full/stress/endpoint-focused SLA run.
+- [x] RabbitMQ topology/DLQ видны на стенде; prod consumer healthcheck подтверждён base+prod запуском.
 - [x] Celery вызывается из горячего пути API; фото/push tasks доработаны.
 - [x] Grafana показывает бизнес-метрики и метрики бота; метрики теперь питаются.
 - [x] Compose без дефолтных значений у секретов; gitleaks no leaks found.
 - [x] `stage4_report.md` сведён по исправленным Auditor-пунктам.
-- [ ] `audit-final.md` подтверждает закрытие 10 пунктов — не создан.
+- [x] `audit-final.md` подтверждает закрытие финальных пунктов и ожидаемые 30+ баллов.
 
 **Текущий вывод после доработок:** блокирующие замечания аудитора исправлены.
-Остаток перед финальной защитой: screenshot Grafana, стендовый base+prod
-запуск consumer-сервисов и финальный аудит.
+Перед финальной защитой остаются только внешние подтверждения: фактический
+GitHub Actions после push/PR и PM-зачёт Locust/notification-сервиса.
 
 ---
 

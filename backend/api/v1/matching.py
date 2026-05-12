@@ -131,7 +131,8 @@ async def swipe_profile(
     )
 
     # Celery: точечный пересчёт рейтинга получателя свайпа.
-    # При is_match — отправляем push-уведомления через bot consumer.
+    # При is_match — единственный match.created для bot consumer публикует
+    # send_match_push, чтобы не задублировать push-уведомления.
     try:
         from tasks.rating_tasks import recalculate_profile_rating
         recalculate_profile_rating.delay(profile_id=str(swipe_data.profile_id))
@@ -224,7 +225,7 @@ async def _publish_swipe_events(
     action: str,
     result: dict,
 ) -> None:
-    """Опубликовать swipe/match события через singleton publisher.
+    """Опубликовать swipe-событие через singleton publisher.
 
     Полностью fail-safe: ошибки публикации не валят основной HTTP-ответ
     (см. `core.mq.safe_publish`). При недоступности RabbitMQ запрос всё
@@ -240,15 +241,3 @@ async def _publish_swipe_events(
         ),
         op="swipe_event",
     )
-
-    match_id = result.get("match_id")
-    if result.get("is_match") and match_id:
-        await safe_publish(
-            lambda p: p.publish_match_event(
-                user1_id=swiper_id,
-                user2_id=swiped_id,
-                match_id=match_id,
-                swipe_ids=[swipe_id] if swipe_id else [],
-            ),
-            op="match_event",
-        )

@@ -12,6 +12,7 @@ import uuid
 from typing import List, Dict, Any, Optional
 from datetime import date
 
+from loguru import logger
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -106,39 +107,41 @@ class MatchingService:
             .where(PhotoModel.deleted_at.is_(None))
         ).scalar_subquery()
 
-        query = (
-            select(
-                Profile,
-                RatingCombinedModel.total_score.label('rating_score')
-            )
-            .outerjoin(
-                RatingCombinedModel,
-                Profile.id == RatingCombinedModel.profile_id
-            )
-            .where(
-                and_(
-                    Profile.id != my_profile.id,
-                    Profile.is_active.is_(True),
-                    Profile.id.notin_(swiped_ids) if swiped_ids else True,
-                    Profile.id.in_(profiles_with_photo),
+        def _build_query(include_city: bool):
+            base = (
+                select(
+                    Profile,
+                    RatingCombinedModel.total_score.label('rating_score')
+                )
+                .outerjoin(
+                    RatingCombinedModel,
+                    Profile.id == RatingCombinedModel.profile_id
+                )
+                .where(
+                    and_(
+                        Profile.id != my_profile.id,
+                        Profile.is_active.is_(True),
+                        Profile.id.notin_(swiped_ids) if swiped_ids else True,
+                        Profile.id.in_(profiles_with_photo),
+                    )
                 )
             )
-        )
+            base = self._apply_preferences_filters(base, my_profile, include_city=include_city)
+            base = base.order_by(RatingCombinedModel.total_score.desc().nullslast())
+            return base.limit(limit)
 
-        # 4. Применить фильтры по предпочтениям
-        query = await self._apply_preferences_filters(query, my_profile)
-
-        # 5. Ранжировать по рейтингу (desc)
-        query = query.order_by(
-            RatingCombinedModel.total_score.desc().nullslast()
-        )
-
-        # 6. Лимит
-        query = query.limit(limit)
-
-        # 7. Выполнить запрос
-        result = await self.db.execute(query)
+        # 4–6. Сначала пробуем строгий поиск (по городу пользователя)
+        result = await self.db.execute(_build_query(include_city=True))
         rows = result.all()
+
+        # 4b. Soft fallback: если в городе никого нет — расширяем поиск
+        if not rows and my_profile.city:
+            logger.info(
+                f"[Matching] Город {my_profile.city!r}: 0 кандидатов — "
+                "расширяю поиск без city-фильтра"
+            )
+            result = await self.db.execute(_build_query(include_city=False))
+            rows = result.all()
 
         if not rows:
             return []
@@ -272,16 +275,23 @@ class MatchingService:
     # HELPER METHODS
     # ============================================
 
-    async def _apply_preferences_filters(
+    def _apply_preferences_filters(
         self,
         query,
-        my_profile: Profile
+        my_profile: Profile,
+        *,
+        include_city: bool = True,
     ):
-        """Применить фильтры по предпочтениям пользователя."""
+        """Применить фильтры по предпочтениям пользователя.
+
+        ``include_city=False`` отключает строгий фильтр по городу — используется
+        для soft fallback, когда первый проход не нашёл кандидатов в родном
+        городе пользователя.
+        """
         filters = []
 
-        # Фильтр по городу (если указан)
-        if my_profile.city:
+        # Фильтр по городу (если указан) — отключается на fallback-проходе
+        if include_city and my_profile.city:
             filters.append(Profile.city == my_profile.city)
 
         # Фильтр по полу (looking_for)
