@@ -1,6 +1,4 @@
-"""
-Тестовые зависимости для Backend API.
-"""
+# Тестовые зависимости для Backend API.
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 httpx>=0.26.0
