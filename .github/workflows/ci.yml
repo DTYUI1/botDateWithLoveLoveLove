@@ -47,11 +47,11 @@ jobs:
           pip install -r tests/requirements.txt
       - name: Run pytest (без инфраструктуры — infra-кейсы помечены skip)
         env:
-          PYTHONPATH: backend
+          PYTHONPATH: ".:backend"
           DATABASE_URL: "sqlite+aiosqlite:///./test.db"
           REDIS_URL: ""
           RABBITMQ_URL: ""
-        run: pytest tests -v --tb=short
+        run: python -m pytest tests -v --tb=short
 
   build-images:
     name: Build Docker images
